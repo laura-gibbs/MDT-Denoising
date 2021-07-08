@@ -20,15 +20,6 @@ class CAEDataset(Dataset):
                 self.quilt_paths = glob.glob(os.path.join(quilt_dir, '*.png'))
             print(region_dir)
 
-    # def __init__(self, region_dir, target_dir, mdt=False, transform=None):
-    #         self.region_dir = region_dir
-    #         self.target_dir = target_dir
-    #         self.transform = transform
-    #         self.mdt = mdt
-    #         self.paths = glob.glob(os.path.join(region_dir, '*.npy'))
-    #         self.target_paths = glob.glob(os.path.join(target_dir, '*.npy'))
-    #         print(region_dir)
-    #         print(target_dir)
 
     def __len__(self):
         return len(self.paths)
@@ -75,18 +66,4 @@ class CAEDataset(Dataset):
             target_img = self.transform(target_img)
 
 
-    # def __getitem__(self, idx):
-    #     input_name = self.paths[idx]
-    #     target_name = self.target_paths[idx]
-    #     img = np.load(input_name)
-    #     target_img = np.load(target_name)
-    
-    #     mask = target_img != 0
-    #     img = img * mask
-
-    #     if self.transform is not None:
-    #         img = self.transform(img)
-    #         target_img = self.transform(target_img)
-
-    #     return ToTensor()(img), ToTensor()(target_img)
         return ToTensor()(img), ToTensor()(target_img)
