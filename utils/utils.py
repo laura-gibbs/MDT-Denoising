@@ -25,8 +25,45 @@ def create_coords(resolution, rads=False):
     return longitude, latitude
 
 
+def get_spatial_params(x, y, w=128, h=128, resolution=0.25):
+    coord_grid = create_coords(resolution)
+    lons = coord_grid[0][x:x+w]
+    lats = coord_grid[1][int(180/resolution)-y:int(180/resolution)-(y+h):-1]
+    x0, x1 = x * resolution, (x + w) * resolution
+    y0, y1 = 90 - y * resolution, 90 - (y + h) * resolution
+    if x0 > 180:
+        x0 -= 360
+        x1 -= 360
+    extent = x0, x1, y0, y1
+    return lons, lats, extent
+
+
+def get_region_coords(resolution, region_size_d=32):
+    r'''
+    resolution (float): degree resolution
+    region_size_d (int): region size in degrees
+    '''
+    x_coords = []
+    y_coords = []
+    region_size = region_size_d / resolution
+    # For threshold 64 North and South
+    y0 = (90 - 64) / resolution
+    y1 = (180 - 26) / resolution
+    x0 = 0
+    x1 = 360 / resolution
+    y = y0
+    for i in range((y1 - y0) // region_size):
+        y = i * region_size + y0
+        for j in range((x1 - x0) // region_size):
+            x = j * region_size
+            x_coords.append(x)
+            y_coords.append(y)
+    return x_coords, y_coords
+
+
 def bound_arr(arr, lower_bd, upper_bd):
     arr[np.isnan(arr)] = lower_bd
     arr[arr < lower_bd] = lower_bd
     arr[arr > upper_bd] = upper_bd
     return arr
+
