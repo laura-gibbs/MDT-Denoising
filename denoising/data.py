@@ -7,6 +7,8 @@ from PIL import Image
 from torchvision.transforms import ToTensor
 from torch.utils.data import Dataset
 import random
+from PIL import Image
+import matplotlib.pyplot as plt
 
 class CAEDataset(Dataset):
 
@@ -21,7 +23,6 @@ class CAEDataset(Dataset):
                 self.quilt_paths = glob.glob(os.path.join(quilt_dir, '*.png'))
             print(region_dir)
                 
-
 
     def __len__(self):
         return len(self.paths)
@@ -62,10 +63,29 @@ class CAEDataset(Dataset):
         # consider turning back to PIL images for transforms e.g. rotations, flips
         # img = Image.fromarray(img)
         # target_img = Image.fromarray(target_img)
-
+        # fig, ax = plt.subplots(1,2)
+        # ax[0].imshow(img)
+        # ax[1].imshow(target_img)
+        # plt.show()
         if self.transform is not None:
-            img = self.transform(img)
-            target_img = self.transform(target_img)
+            t = self.transform(image=img, mask=target_img)
+            img = t['image']
+            target_img = t['mask']
+            # # turn into PIL
+            # img = Image.fromarray(img)
+            # target_img = Image.fromarray(target_img)
+            # img = self.transform(img)
+            # target_img = self.transform(target_img)
+        # fig, ax = plt.subplots(1,2)
+        # ax[0].imshow(img)
+        # ax[1].imshow(target_img)
+        # plt.show()
 
+        # img = ToTensor()(np.array(img))
+        # target_img = ToTensor()(np.array(target_img))
+        # fig, ax = plt.subplots(1,2)
+        # ax[0].imshow(img)
+        # ax[1].imshow(target_img)
+        # plt.show()
 
-        return ToTensor()(img), ToTensor()(target_img)
+        return ToTensor()(np.array(img)), ToTensor()(np.array(target_img))

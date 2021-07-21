@@ -11,6 +11,7 @@ from torch.utils.data.sampler import SubsetRandomSampler
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 from scipy import interpolate
+import albumentations as A
 
 
 def imshow(img):
@@ -25,22 +26,32 @@ device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 transform = transforms.ToTensor()
 
 mdt = False
-n_epochs = 161
+n_epochs = 200
 if mdt:
     var = 'mdt'
 else:
     var = 'cs'
 # Amend following code for my data
+transform = True
+if transform:
+    transforms = A.Compose([
+                    A.augmentations.geometric.rotate.RandomRotate90(),
+                    A.augmentations.transforms.Flip()
+                ])
+else:
+    transforms = None
+
+multiscale_loss = True
+if multiscale_loss:
+    scales = [0.25, 0.5, 1, 2, 4]
+else:
+    scales = [1]
+
 train_data = CAEDataset(
     region_dir=f'../a_mdt_data/HR_model_data/{var}_training_regions',
     quilt_dir=f'./quilting/DCGAN_{var}',
     mdt=mdt,
-    transform=transforms.Compose([
-        transforms.RandomRotation(90),
-        transforms.RandomVerticalFlip,
-        transforms.RandomHorizontalFlip,
-
-    ])
+    transform=transforms
     #write what I want - transforms.compose which allows to connect a bunch together
     # check whether the target and input transforms need to be fixed to be the same
 )
@@ -52,7 +63,8 @@ test_data = CAEDataset(
 
 r = 2
 a = 5
-exp_epochs = [a * r**i for i in range(6)]
+# save_epochs = [a * r**i for i in range(6)]
+save_epochs = np.arange(10, 200, 10)
 
 num_workers = 0
 # batch_size = 64
@@ -70,6 +82,7 @@ criterion = nn.MSELoss(reduction='none')
 
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 
+
 for epoch in range(1, n_epochs+1):
     train_loss = 0.0
     for i, data in enumerate(train_loader):
@@ -77,22 +90,13 @@ for epoch in range(1, n_epochs+1):
         targets = data[1].to(device)
         outputs = model(images)
         land_mask = targets != 0
-        # print('outputs shape: ', outputs.shape)
-        # print('targets shape: ', targets.shape)
-        # print('land mask shape: ', land_mask.shape)
-        # print('output type: ', type(outputs))
-        # print('target type: ', type(targets))
-        # print('land mask type: ', type(land_mask))
 
         losses = []
-        for scale in [0.25, 0.5, 1, 2, 4]:
+        for scale in scales:
             loss = criterion(interpolate(outputs, scale=scale), interpolate(targets, scale=scale))
-            # print('scale: ', scale)
             land_mask = land_mask.float()
             mask = interpolate(land_mask, scale=scale)
             mask = mask.bool()
-            # print('loss shape: ', loss.shape)
-            # print('land mask shape: ', mask.shape)
             loss = loss * mask
             loss = loss.mean()
             losses.append(loss)
@@ -111,10 +115,12 @@ for epoch in range(1, n_epochs+1):
             train_loss
             ))
         
-        if epoch in exp_epochs:
-            torch.save(model.state_dict(), f'models/multiscale_loss_{var}/{epoch}e_{var}_model_cdae.pth')
+        if epoch == 5:
+            torch.save(model.state_dict(), f'models/aug_multiscale_loss_{var}/{epoch}e_{var}_model_cdae.pth')
 
-        #if epoch%10==0:
+        if epoch in save_epochs:
+            torch.save(model.state_dict(), f'models/aug_multiscale_loss_{var}/{epoch}e_{var}_model_cdae.pth')
+
 
 # torch.save(model.state_dict(), f'models/{n_epochs}e_{var}_model_cdae.pth')
 
