@@ -231,15 +231,17 @@ def get_plot_params(mdt=False, rmse=False, residual=False):
     return vmin, vmax, cticks
 
 
-def create_subplot(data, regions, mdt=False, rmse=False, residual=False, cols=3, crs=ccrs.PlateCarree(), titles=None, big_title=None):
+def create_subplot(data, regions, mdt=False, rmse=False, residual=False, cols=3, crs=ccrs.PlateCarree(), titles=None, big_title=None, cmaps=None):
     vmin, vmax, cticks = get_plot_params(mdt, rmse, residual)
-    if rmse:
-        cmap = 'jet' #'hot_r'
-    elif residual:
-        cmap='bwr'#, norm=MidpointNormalize(midpoint=0.)
-    else:
-        cmap = 'turbo'
-    fig, axes  = plt.subplots(len(data) // cols, cols, figsize=(25, 10), subplot_kw={'projection': crs})#, squeeze=False)
+    if cmaps is None:
+        if rmse:
+            cmap = 'jet' #'hot_r'
+        elif residual:
+            cmap='bwr'#, norm=MidpointNormalize(midpoint=0.)
+        else:
+            cmap = 'turbo'
+        cmaps = [cmap] * len(data)
+    fig, axes  = plt.subplots(len(data) // cols, cols, figsize=(25, 10), subplot_kw={'projection': crs}, squeeze=False)
     if titles is None:
         titles = [''] * len(data)
     for i, axrow in enumerate(axes):
@@ -250,7 +252,7 @@ def create_subplot(data, regions, mdt=False, rmse=False, residual=False, cols=3,
             # w, h = tensor[j, 0].shape
             lons, lats, extent = get_spatial_params(x, y)
             print("ERROR", data[i * len(axrow) + j].shape)
-            im = plot_region(data[i * len(axrow) + j], ax, lons, lats, extent, vmin=vmin, vmax=vmax, cmap=cmap)
+            im = plot_region(data[i * len(axrow) + j], ax, lons, lats, extent, vmin=vmin, vmax=vmax, cmap=cmaps[i * len(axrow) + j])
             ax.set_title(titles[i * len(axrow) + j])
     cbarheight = 0.75
     bottom_pos = (1 - cbarheight)/2 - 0.005
@@ -271,7 +273,7 @@ def calculate_rmse(x, y, normalise=False):
     if normalise:
         x, y = norm(x), norm(y)
     return np.sqrt(np.mean((x - y)**2))
-
+    
 
 def main():
     mdt = False
@@ -301,19 +303,18 @@ def main():
     n_epochs = 160
 
     # 'orca' or 'cls'
-    ref_var = 'cls'
+    ref_var = 'orca'
 
       # Only one region needed as reference for geodetic data
     # -----------------------------------------------
     
-    geodetic = False
+    geodetic = True
     if geodetic:
         dataset = CAEDataset(region_dir=f'../a_mdt_data/testing_geodetic_data/{var}', quilt_dir=None, mdt=mdt)
         t_dataset = CAEDataset(region_dir=f'../a_mdt_data/HR_model_data/{ref_var}_{var}_regions', quilt_dir=None, mdt=mdt)
         network_images = dataset.get_regions(x, y)
         network_images = torch.stack(network_images)
         target = t_dataset.get_regions(x,y)[0]
-        print('TARGET', target.shape)
     else:
         dataset = CAEDataset(region_dir=f'../a_mdt_data/HR_model_data/small_{var}_testing', quilt_dir=f'./quilting/DCGAN_{var}', mdt=mdt)
         t_dataset = CAEDataset(region_dir=f'../a_mdt_data/HR_model_data/small_{var}_testing', quilt_dir=None, mdt=mdt)
@@ -322,55 +323,16 @@ def main():
         target = t_dataset.get_regions(x,y)
         target = torch.stack(target)
         target = torch.squeeze(target, dim=1)
-        print('TARGET', target.shape)
     
     images, target = detach_tensors([network_images, target])
     images = np.squeeze(images, axis=1) 
-
-    plt.imshow(images[0], cmap='turbo', vmin=0, vmax=1.5)
-    plt.show()
-    plt.imshow(target[0], cmap='turbo', vmin=0, vmax=1.5)
-    plt.show()
     
-    print('images', images.shape, 'target', target.shape)
     mask = land_false(images)[0]
-    print('mask', mask.shape)
     target = target * mask
     images = images * mask
-    print(target.shape)
-    
-    # fig, ax = plt.subplots(1,2)
-    # ax[0].imshow(target[0][0])
-    # ax[1].imshow(target[1][0])
-    # plt.show()
-
-
-    # Gaussian filtered MDT: test for one filter radius
-    # -------------------------
-    # sigma = ((320 * 4) / 111) / 2.355
-    # gauss_images = [apply_gaussian(image, mdt, sigma) for image in g_images]
-    # gauss_images = np.array(gauss_images)
-    # print(gauss_images.shape)
-    
-
-    # # Using RB's filter: test for one filter radius
-    # # ---------------------------
-    # # g_images = g_images[:2,:,:,:]
-    # print(g_images.shape)
-    # print(type(g_images))
-    # g_mask = g_images[0] == 0
-    # lons, lats, _ = get_spatial_params(x, y)
-    # II, JJ = 128, 128
-    # print('g_images ', g_images[0].shape, g_mask.shape)
-    # gauss_images = [rb_gaussian(II, JJ, lons, lats, image.squeeze(0), g_mask[0], 50000, 'gsn')[0] for image in g_images]
-    # print(type(gauss_images))
-    # gauss_images = np.array(gauss_images)
-    # gauss_images = np.expand_dims(gauss_images, axis=1)
-    # print(gauss_images.shape)
 
     gauss_filtered = []
 
-    
     # ------------------------------------------
     # Calculate Standard Gaussian Filtered Geodetic MDTs and RMSE/SSIM between Gauss vs NEMO and Model vs NEMO
     # FWH_pixels  = 2.355 * sigma
@@ -403,6 +365,7 @@ def main():
     # --------------------------------------------
     # sigmas = [10000, 50000, 100000]#, 150000, 200000]
     sigmas = np.arange(10000, 150001, 10000)
+    # sigmas = [10000] * 15
     # 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
     II, JJ = 128, 128
     gauss_rmsds = []
@@ -431,262 +394,139 @@ def main():
     print('GAUSS AVG RMSDS SHAPE: ', len(gauss_avg_rmsds), gauss_avg_rmsds)
 
 
-    fig, ax = plt.subplots(1,2)
-    gauss_filtered = np.array(gauss_filtered)
-    print(gauss_filtered.shape) # Number of sigmas x Number of regions x 128 x 128
-    ax[0].imshow(gauss_filtered[0,0])
-    ax[1].imshow(gauss_filtered[7,0])
-    # ax[2].imshow(gauss_filtered[2,0])
-    # ax[3].imshow(gauss_filtered[3,0])
-    plt.show()
 
     # Calculate RMSD: test for one filter radius
     # -----------------------
-    print('gauss_filtered: ', gauss_filtered.shape)
     # Avg RMSD for one sigma:
     gauss_rmsd = compute_avg_rmsd(gauss_filtered[0], target, hw_size=5, mask=mask)
-    plt.imshow(gauss_rmsd, cmap='jet', vmax=0.2)
-    plt.show()
+    # plt.imshow(gauss_rmsd, cmap='jet', vmax=0.2)
+    # plt.show()
+
+    def forward_pass(model, network_images, target=None):
+        outputs = model(network_images)
+        n_images, outputs = detach_tensors([network_images, outputs])
+        n_mask = land_false(n_images)[0]
+        if target is not None:  # I don't know why this is here
+            target = target * mask
+        n_images = n_images * n_mask
+        outputs = outputs * n_mask
+        return outputs
+
+
+    def evaluate_model(model, network_images):
+        outputs = forward_pass(model, network_images)
+        rmsd = compute_avg_rmsd(outputs[:, 0], target, hw_size=5, mask=mask)
+        avg_residual = compute_avg_residual(outputs, target)
+        residual = (outputs[0] - target[0])
+
+        return outputs, rmsd, avg_residual, residual[0]
+
+
+    def test_multiple_models(model_filepaths):
+        """Runs multiple models and returns lists of metrics
+
+        Args:
+            model_filepaths (list of str): Filepaths to the models to be tested.
+        """
+        rmsds = []
+        avg_residuals = []
+        network_avg_rmsds = []
+        network_outputs = []
+        residuals = []
+        for filepath in model_filepaths:
+            model.load_state_dict(torch.load(filepath))
+            outputs, rmsd, avg_residual, residual = evaluate_model(model, network_images)
+
+            network_outputs.append(outputs)
+            rmsds.append(rmsd)
+            network_avg_rmsds.append(np.mean(rmsd))
+            avg_residuals.append(avg_residual)
+            residuals.append(residual)
+
+        return rmsds, avg_residuals, network_avg_rmsds, network_outputs, residuals
     
-
-    # Providing first images for following subplots (Gaussian filtered for RMSD and Unfiltered for Residuals)
-    # -----------------------------------------------
-    print('gauss_rmsd shape', gauss_rmsd.shape)
-    min_index = gauss_avg_rmsds.index(min(gauss_avg_rmsds))
-    print(min_index)
-    rmsds = [gauss_rmsds[min_index]]
-    avg_residuals = [compute_avg_residual(images, target)]
-    print(len(avg_residuals))
-
-    residuals = [(images[0] - target[0])]
-    print('residuals shape', images[0].shape, target[0].shape)
-
 
     # Computing RMSD for region (x,y) across different number of epochs
     # --------------------------------------------------
     r = 2
     a = 5
     epoch_inc = 25
-    epochs = [a * r**i for i in range(6)]
-    # epochs = [10, 20, 30, 40, 50, 60, 70, 80, 100, 125, 150]
-    print(epochs)
-    # epochs = list(range(epoch_inc, 175, epoch_inc))
-    avg_rmses = []
-    network_avg_rmsds = []
-    network_outputs = []
-    print(epochs)
-    for epoch in epochs:
-        model.load_state_dict(torch.load(f'./models/multiscale_loss_{var}/{epoch}e_{var}_model_cdae.pth'))
-        # model.load_state_dict(torch.load(f'./models/{epoch_inc}epochs_{var}/{epoch}e_{var}_model_cdae.pth'))
-        outputs = model(network_images)
-        n_images, outputs = detach_tensors([network_images, outputs])
-        n_mask = land_false(n_images)[0]
-        # target = target * mask
-        n_images = n_images * n_mask
-        outputs = outputs * n_mask
-        print('outupts shape: ', outputs.shape)
-        # outputs = np.squeeze(outputs, axis=0)
-        print('shapes: ', outputs.shape, target.shape)
-        network_outputs.append(outputs)
-
-        rmsd = compute_avg_rmsd(outputs[:, 0], target, hw_size=5, mask=mask)
-        rmsds.append(rmsd)
-        
-        # Epoch line graph: 1 value per epoch avgd over a region (all 0, 488 for example)
-        network_avg_rmsds.append(np.mean(rmsd))
-
-        # For line graph: hline
-        # avg_rmses.append(calculate_rmse(outputs, target))
-
-        avg_residual = compute_avg_residual(outputs, target)
-        avg_residuals.append(avg_residual)
-        residual = (outputs[0] - target[0])
-        residuals.append(residual[0])
-        
-
-        # rmsd = compute_rmsd(avg_residual, hw_size=5, mask=mask)
-        print(outputs.shape, target.shape)
-        print(f'rmsd.shape={rmsd.shape}')
+    epochs = [a * r ** i for i in range(6)]
+    model_filepaths = [f'./models/vanilla_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
+    rmsds, avg_residuals, network_avg_rmsds, network_outputs, residuals = test_multiple_models(model_filepaths)
 
 
-    print(np.shape(outputs))
-    print('network outputs: ', np.shape(network_outputs))
-    print(gauss_filtered.shape)
-    fig, axs = plt.subplots(2,6)
-    plt.suptitle("Network vs Gaussian Filter", size=16)
-    axs[0][0].imshow(network_outputs[0][0][0], cmap='turbo', vmin=0, vmax=1.5)
-    axs[0][0].set_title('5 epochs')
-    axs[0][1].imshow(network_outputs[1][0][0], cmap='turbo', vmin=0, vmax=1.5)
-    axs[0][1].set_title('10 epochs')
-    axs[0][2].imshow(network_outputs[2][0][0], cmap='turbo', vmin=0, vmax=1.5)
-    axs[0][2].set_title('20 epochs')
-    axs[0][3].imshow(network_outputs[3][0][0], cmap='turbo', vmin=0, vmax=1.5)
-    axs[0][3].set_title('40 epochs')
-    axs[0][4].imshow(network_outputs[4][0][0], cmap='turbo', vmin=0, vmax=1.5)
-    axs[0][4].set_title('80 epochs')
-    axs[0][5].imshow(network_outputs[5][0][0], cmap='turbo', vmin=0, vmax=1.5)
-    axs[0][5].set_title('160 epochs')
-    axs[1][0].imshow(gauss_filtered[0][0], cmap='turbo', vmin=0, vmax=1.5)
-    axs[1][0].set_title('filter radius: 10km')
-    axs[1][1].imshow(gauss_filtered[3][0], cmap='turbo', vmin=0, vmax=1.5)
-    axs[1][1].set_title('filter radius: 40km')
-    axs[1][2].imshow(gauss_filtered[6][0], cmap='turbo', vmin=0, vmax=1.5)
-    axs[1][2].set_title('filter radius: 70km')
-    axs[1][3].imshow(gauss_filtered[9][0], cmap='turbo', vmin=0, vmax=1.5)
-    axs[1][3].set_title('filter radius: 100km')
-    axs[1][4].imshow(gauss_filtered[12][0], cmap='turbo', vmin=0, vmax=1.5)
-    axs[1][4].set_title('filter radius: 130km')
-    axs[1][5].imshow(gauss_filtered[14][0], cmap='turbo', vmin=0, vmax=1.5)
-    axs[1][5].set_title('filter radius: 150km')
+    # Providing first images for following subplots (Gaussian filtered for RMSD and Unfiltered for Residuals)
+    # -----------------------------------------------
+    min_index = gauss_avg_rmsds.index(min(gauss_avg_rmsds))
+    rmsds = [gauss_rmsds[min_index]] + rmsds
+    avg_residuals = [compute_avg_residual(images, target)] + avg_residuals
+    residuals = [(images[0] - target[0])] + residuals
+
+    #
+    # -----------------------------------------------
+    indices = [0,3,6,9,12,14]
+    plot_list = [network_outputs[i][0][0] for i in range(6)] + [gauss_filtered[i][0] for i in indices]
+    plot_titles = [f'{epoch} epochs' for epoch in epochs] + [f'filter radius: {sigmas[i]//1000}km' for i in indices]
+    create_subplot(plot_list, [[x, y]] * len(plot_list), cols=6, titles=plot_titles)
+    plt.show()
+
+    #
+    # -----------------------------------------------
+    indices = [0, 2, 5]
+    plot_list = [images[0]] + [network_outputs[i][0][0] for i in indices]
+    create_subplot(plot_list, [[x, y]] * len(plot_list), cols=4)
+    plt.show()
+    plot_list = [images[0]-target[0]] + [network_outputs[i][0][0]-target[0] for i in indices]
+    create_subplot(plot_list, [[x, y]] * len(plot_list), residual=True, cols=4)
     plt.show()
 
 
-    fig, axs = plt.subplots(2,4)
-    print(images.shape)
-    axs[0][0].imshow(images[0], cmap='turbo', vmin=0, vmax=1.5)
-    axs[0][1].imshow(network_outputs[0][0][0], cmap='turbo', vmin=0, vmax=1.5)
-    axs[0][2].imshow(network_outputs[2][0][0], cmap='turbo', vmin=0, vmax=1.5)
-    axs[0][3].imshow(network_outputs[5][0][0], cmap='turbo', vmin=0, vmax=1.5)
-    axs[1][0].imshow(images[0]-target[0], cmap='bwr', vmin=-0.6, vmax=0.6)
-    axs[1][1].imshow(network_outputs[0][0][0]-target[0], cmap='bwr', vmin=-0.6, vmax=0.6)
-    axs[1][2].imshow(network_outputs[2][0][0]-target[0], cmap='bwr', vmin=-0.6, vmax=0.6)
-    axs[1][3].imshow(network_outputs[5][0][0]-target[0], cmap='bwr', vmin=-0.6, vmax=0.6)
-    plt.show()
-
-
-
-
-    # print(np.shape(rmsds))
     # create_subplot(rmsds, [[x, y]] * batch_size, mdt=mdt, rmse=True, titles=['Gaussian Filtered'] + [f'{epoch} epochs' for epoch in epochs], big_title=f'RMSD between network output and reference - trained over a different number of epochs ({var} trained)')    
-    # print(np.shape(residuals))
     # create_subplot(residuals, [[x, y]] * batch_size, mdt=mdt, rmse=False, residual=True, titles=['Unfiltered'] + [f'{epoch} epochs' for epoch in epochs], big_title=f'Residual difference (Output - Reference) trained over a different number of epochs ({var} trained)')
     
-
     # Plot line graph of epochs against Gaussian RMSD
     # ----------------------------------------------
-    print('network outputs[0] shape: ', network_outputs[0].shape, 'target shape: ', target.shape)
-    # H lines:
-    avg_rmse = calculate_rmse(network_outputs[0], target) # first epoch
-    gauss_rmse = calculate_rmse(gauss_filtered[0], target) # first radius
-    # gauss_avg_rmsds = np.array(gauss_avg_rmsds)
-
     print('gauss rmses :', gauss_avg_rmsds)
     print('network rmses :', network_avg_rmsds)
     plt.plot(sigmas, gauss_avg_rmsds)
     plt.axhline(y=np.min(network_avg_rmsds), color='r', linestyle='dashed')
-    plt.legend(["Gaussian filter output", "CDAE output at 160 epochs"], loc ="upper right")
+    plt.legend(["Gaussian filter output", "Best CDAE Output"], loc ="upper right")
     plt.xlabel('Gaussian Filter Radius', fontsize=12)
     # plt.xlabel('Gaussian Filter Half-weight Radius (km)', fontsize=12)
     plt.ylabel('RMSE', fontsize=12)
     # plt.ylim(bottom=0.14, top=0.23)
-    plt.title('RMSE of Different Filtering Methods Against NEMO Data')
+    plt.title('RMSE of Different Filtering Methods Against ' + ref_var + ' Data')
     plt.show()
     plt.close()
 
-    plt.plot(epochs, network_avg_rmsds)
+    epochs = np.arange(10, 190, 10)
+    vanilla_model_filepaths = [f'./models/vanilla_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
+    _, _, vanilla_avg_rmsds, _, _ = test_multiple_models(vanilla_model_filepaths)
+    plt.plot(epochs, vanilla_avg_rmsds)
+
+    # Generate avg_rmsds for other networks
+    aug_model_filepaths = [f'./models/aug_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
+    _, _, aug_avg_rmsds, _, _ = test_multiple_models(aug_model_filepaths)
+    plt.plot(epochs, aug_avg_rmsds)
+
+    ms_model_filepaths = [f'./models/multiscale_loss_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
+    _, _, ms_avg_rmsds, _, _ = test_multiple_models(ms_model_filepaths)
+    plt.plot(epochs, ms_avg_rmsds)
+
+    # aug_multi_filepaths = [f'./models/aug_multiscale_loss_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
+    # _, _, aug_multi_avg_rmsds, _, _ = test_multiple_models(aug_multi_filepaths)
+    # plt.plot(epochs, aug_multi_avg_rmsds)
+
     plt.axhline(y=np.min(gauss_avg_rmsds), color='r', linestyle='dashed')
-    plt.legend(['CDAE output', 'Gaussian filter'], loc ="upper right")
+    plt.legend(['Vanilla', 'Augmentation', 'Multiscale Loss', 'Gaussian filter'], loc ="upper right")
     plt.xlabel('Number of Epochs', fontsize=12)
     plt.ylabel('RMSE', fontsize=12)
     # plt.ylim(bottom=0.14, top=0.23)
-    plt.title('RMSE of Different Filtering Methods Against NEMO Data')
+    plt.title('RMSE of Different Filtering Methods Against ' + ref_var + ' Data')
     plt.show()
     plt.close()
 
-
-    fig, ax = plt.subplots(1,4)
-    ax[0].imshow(images[0])#, vmin=-0.6, vmax=0.6)
-    ax[1].imshow(outputs[0])#, vmin=-0.6, vmax=0.6)
-    ax[2].imshow(target[0])#, vmin=-0.6, vmax=0.6)
-    ax[3].imshow(residuals[-1])#, vmin=-0.6, vmax=0.6)
-    plt.show()
-    plt.close()
-
- 
-    
-    # Alternative avg rmsds method? Uses compute_rmsd instead of compute_avg_rmsd?
-    # Uses x_coords so it loops through the different regions
-    avg_rmses = []
-    rmsds = []
-    for x, y in zip(x_coords, y_coords):
-        outputs = model(network_images)
-        g_images, outputs = detach_tensors([g_images, outputs])
-        g_mask = land_false(g_images)[0]
-        target = target * g_mask
-        g_images = g_images * g_mask
-        outputs = outputs * g_mask
-        avg_residual = compute_avg_residual(outputs, target)
-    
-        # # -------
-        # # Felix's code to calculate a second residual and plot both side by side
-        # # -------
-        # target2 = t_dataset.get_regions(x,y)[0]
-        # avg_residual2 = compute_avg_residual(outputs, target2.numpy() * mask)
-        # fig, ax = plt.subplots(1,2)
-        # ax[0].imshow(avg_residual)
-        # ax[1].imshow(avg_residual2)
-        # plt.show()
-
-        rmsd = compute_rmsd(avg_residual, hw_size=3, mask=mask)
-        rmsds.append(rmsd[0])
-        lons, lats, extent = get_spatial_params(x, y)
-        # fig, ax = plt.subplots(1, 1, subplot_kw={'projection':ccrs.PlateCarree()})
-        # im = plot_region(rmsd[0], ax, lons, lats, extent, cmap='hot')
-        # plt.imshow(rmsd[0], vmin=0.3, vmax=1)
-        # plt.show()
-        avg_rmse = np.sqrt(np.mean((outputs - target) ** 2))
-        avg_rmses.append(avg_rmse)
-
-
-
-    # -----------------------------------------
-    # Load CMIP images with added synthetic noise
-    images, targets, paths = load_batch(dataset, batch_size)
-    outputs = model(images)
-    images, outputs, targets = detach_tensors([images, outputs, targets])
-    mask = land_false(targets)
-    lmask = land_true(targets)
-
-    if not mdt:
-        outputs = outputs * mask
-
-    residual = (targets - outputs) * mask
-
-
-    # -------------------------------------------
-    # Plot input, target, outputs for multiple regions
-    fig, axes  = plt.subplots(3, batch_size, figsize=(25, 10), subplot_kw={'projection': crs})
-    if mdt:
-        images[lmask] = vmin
-        outputs[lmask] = vmin
-        targets[lmask] = vmin
-
-    for i, (axrow, tensor) in enumerate(zip(axes, [images, outputs, targets])):
-        for j, ax in enumerate(axrow):
-            split_path = paths[j][:len(paths[j])-4].split('_')
-            x, y = int(split_path[-2]), int(split_path[-1])
-            # w, h = tensor[j, 0].shape
-            lons, lats, extent = get_spatial_params(x, y)
-            im = plot_region(tensor[j, 0], ax, lons, lats, extent, vmin=vmin, vmax=vmax)
-    cbarheight = 0.75
-    bottom_pos = (1 - cbarheight)/2 - 0.005
-    cbarwidth = 0.01
-    left_pos = 0.92 # (should be half of cbarwidth to be center-aligned if orien=horiz)
-    cbar = get_cbar(fig, im, [left_pos, bottom_pos, cbarwidth, cbarheight], mdt)
-    # plt.show()
-    # plt.close()
-
-
-    # Plot element wise RMSE across multiple regions
-    rvmin = 0
-    rvmax = 1.
-    c_ticks = 11
-    # if not mdt:
-    #     rvmax = 0.2
-    #     c_ticks = 11
-    # else:
-    #     rvmax = 0.35
-    #     c_ticks = 8
 
     rmses = []
     for x, y in zip(x_coords, y_coords):
@@ -701,26 +541,6 @@ def main():
         rmse = np.sqrt(np.mean((output_regions - target)**2, axis=0))
         rmse = rmse * mask
         rmses.append(rmse[0])
-    fig, axes = plt.subplots(4, 4, subplot_kw={'projection': crs})
-    for i, axrow in enumerate(axes):
-        for j, ax in enumerate(axrow):
-            index = i * 4 + j
-            x, y = x_coords[index], y_coords[index]
-            lons, lats, extent = get_spatial_params(x, y)
-            print(rmses[index].shape)
-            r_plot = plot_region(rmses[index], ax, lons, lats, extent,
-                cmap='jet', vmin=rvmin, vmax=rvmax
-
-            )
-    cbarheight = 0.75
-    bottom_pos = (1 - cbarheight)/2 - 0.005
-    cbarwidth = 0.01
-    left_pos = 0.92 # (should be half of cbarwidth to be center-aligned if orien=horiz)
-    cax = fig.add_axes([left_pos, bottom_pos, cbarwidth, cbarheight])
-    cax.tick_params(labelsize=9)
-    cbar = fig.colorbar(r_plot, cax=cax, ticks=np.linspace(rvmin, rvmax, num=c_ticks))#, orientation='horizontal')
-    plt.show()
-    plt.close()
 
 
 
@@ -728,19 +548,6 @@ if __name__ == "__main__":
     main()
 
 
-
-
-# # Plotting a signle input, output, target, residual
-# ax[0].imshow(images, cmap='turbo', vmin=vmin, vmax=vmax)
-# ax[1].imshow(output, cmap='turbo', vmin=vmin, vmax=vmax)
-# ax[2].imshow(targets, cmap='turbo', vmin=vmin, vmax=vmax)
-# ax[3].imshow(residual, cmap='seismic', norm=MidpointNormalize(midpoint=0.))
-# ax[0].title.set_text('Input')
-# ax[1].title.set_text('Output')
-# ax[2].title.set_text('Target')
-# ax[3].title.set_text('Residual: (Output - Target)')
-# plt.show()
-# plt.close()
 
 # # Plotting the signal
 # fig, axes = plt.subplots(1, 3)
@@ -760,11 +567,6 @@ if __name__ == "__main__":
 # np.corrcoef(image.ravel(), target.ravel())[0, 1]
 # plt.show()
 # plt.close()
-
-# Plotting line of best fit
-# m, b = np.polyfit(image, target, 1)
-# plt.plot(image, m*image + b)
-# plt.show()
 
 # # 2D Histograms
 # hist_2d, x_edges, y_edges = np.histogram2d(
@@ -792,48 +594,6 @@ if __name__ == "__main__":
 # print(mutual_information(hist_2d))
 
 # # Discretize Plotting
-# fig, ax  = plt.subplots(2,3)
-# ax[0][0].imshow(image[0], cmap='turbo', vmin=vmin, vmax=vmax)
-# ax[0][1].imshow(output[0,0], cmap='turbo', vmin=vmin, vmax=vmax)
-# ax[0][2].imshow(target[0], cmap='turbo', vmin=vmin, vmax=vmax)
-# ax[1][0].imshow(disc_output[0,0])
-# ax[1][1].imshow(disc_target[0])
-# ax[1][2].imshow(disc_output[0,0] - disc_target[0])
-# ax[0][0].title.set_text('Input')
-# ax[0][1].title.set_text('Output')
-# ax[0][2].title.set_text('Target')
-# ax[1][0].title.set_text('Discretized Output')
-# ax[1][1].title.set_text('Discretized Target')
-# ax[1][2].title.set_text('Disc. Output - Disc. Target') 
-# plt.show()
-
-
-# # Loading single regions for Gaussian filter plots
-# target_img = np.load('../a_mdt_data/HR_model_data/training_regions/CNRM-CM6-1-HR_r1i1p1f2_gn_2001_cs_0_488.npy')
-# quilt = Image.open('quilting/DCGAN_32deg/cut-b32-n5_2.png')
-# quilt = quilt.convert(mode='L')
-# quilt = np.array(quilt).astype(np.float32)
-# mask = target_img != 0
-# quilt = (quilt - np.nanmin(quilt)) / (np.nanmax(quilt) - np.nanmin(quilt))
-# img = target_img + .3* quilt * mask
-
-# # Gaussian
-# mdt_img = np.load('../a_mdt_data/HR_model_data/training_regions/CNRM-CM6-1-HR_r1i1p1f2_gn_2001_cs_0_488.npy')
-# gauss_img = apply_gaussian(img) * mask
-
-# img = torch.tensor(img)
-# print(img.shape)
-# img = torch.unsqueeze(img, 0)
-# img = torch.unsqueeze(img, 0)
-# print(img.shape)
-
-# # batch x channel x width x height
-# output = model(img)
-# # output = output.view(1, 1, 128, 128)
-# output = output.detach().cpu().numpy()
-# output = np.squeeze(output, 0)
-# output = np.squeeze(output, 0)
-# output = output * mask
 
 
 
