@@ -161,13 +161,13 @@ def rb_gaussian(II, JJ, lon_d, lat_d, data, mask, frad, fltr_type):
                 # print(i, j, sm, np.sum(tfltr), np.sum(fltr))
                 if sm!=0.0:
                     sdata[i,j] = sdata[i,j]/sm
-                rsd[i,j] = data[i,j]-sdata[i,j]
+                #rsd[i,j] = data[i,j]-sdata[i,j]
 
         # plt.imshow(sdata)
         # plt.show()
     print('rb filter outputs: ', sdata.shape, rsd.shape)
     # remove first row j = 0
-    return sdata[1:, :], rsd[1:, :]
+    return sdata[1:, :]
 
 def main():
     pass

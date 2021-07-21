@@ -1,4 +1,5 @@
 import glob
+from operator import ne
 import os
 from skimage import io, transform
 import numpy as np
@@ -19,6 +20,7 @@ class CAEDataset(Dataset):
             if self.quilt_dir is not None:
                 self.quilt_paths = glob.glob(os.path.join(quilt_dir, '*.png'))
             print(region_dir)
+                
 
     # def __init__(self, region_dir, target_dir, mdt=False, transform=None):
     #         self.region_dir = region_dir

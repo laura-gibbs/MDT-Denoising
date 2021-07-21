@@ -34,7 +34,15 @@ else:
 train_data = CAEDataset(
     region_dir=f'../a_mdt_data/HR_model_data/{var}_training_regions',
     quilt_dir=f'./quilting/DCGAN_{var}',
-    mdt=mdt
+    mdt=mdt,
+    transform=transforms.Compose([
+        transforms.RandomRotation(90),
+        transforms.RandomVerticalFlip,
+        transforms.RandomHorizontalFlip,
+
+    ])
+    #write what I want - transforms.compose which allows to connect a bunch together
+    # check whether the target and input transforms need to be fixed to be the same
 )
 test_data = CAEDataset(
     region_dir=f'../a_mdt_data/HR_model_data/{var}_testing_regions',
