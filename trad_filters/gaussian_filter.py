@@ -2,6 +2,7 @@ from scipy.ndimage import gaussian_filter
 import numpy as np
 import math
 import matplotlib.pyplot as plt
+from datetime import datetime
 
 
 def apply_gaussian(arr, sigma=3, bd=-1.5):
@@ -22,23 +23,17 @@ def apply_gaussian(arr, sigma=3, bd=-1.5):
 
 
 def rb_gaussian(II, JJ, lon_d, lat_d, data, mask, frad, fltr_type):
+    r = 6378136.3
+    sigma = frad/np.sqrt(2.0*np.log(2.0))
+    print('sigma: ', sigma)
+        
     print('data shape ', data.shape)
     # Hacky fix
     II = II + 1
-    # new_lat_d = np.zeros((lat_d.shape[0] + 1))
-    # new_lat_d[1:] = lat_d
-    # new_lat_d[0] = lat_d[0] - (lat_d[1] - lat_d[0])
-    # lat_d = np.append([lat_d[0] - (lat_d[1] - lat_d[0])], lat_d)
-    # mask = np.append()
     lon_d = np.insert(lon_d, 0, lon_d[0] - (lon_d[1] - lon_d[0]))
     mask = np.insert(mask, 0, 1, axis=0)
     data = np.insert(data, 0, 0, axis=0)
     print(lat_d.shape, mask.shape)
-
-
-    r = 6378136.3
-    sigma = frad/np.sqrt(2.0*np.log(2.0))
-    print('sigma: ', sigma)
 
     # Convert lons/lats to radians
     lon = lon_d*math.pi/180.0
@@ -58,11 +53,8 @@ def rb_gaussian(II, JJ, lon_d, lat_d, data, mask, frad, fltr_type):
         y2 = r*np.cos(lat[ltrd])*np.sin(lon[0])
         z2 = r*np.sin(lat[ltrd])
         sd = np.sqrt((x1 - x2)**2 + (y1 - y2)**2 + (z1 - z2)**2)
-        print('sd: ', sd)
         ang = 2.0*np.arcsin(0.5*sd/r)
-        print('ang: ', ang)
         d = r*ang
-        print('d: ', d)
 
         if fltr_type=='box' and d > frad:
             break
@@ -83,7 +75,7 @@ def rb_gaussian(II, JJ, lon_d, lat_d, data, mask, frad, fltr_type):
 
     print('ltrd: ', ltrd)
     for j in range(JJ):
-        print('working on row ', j)
+        # print('working on row ', j)
 
         # Comput lat limits of filter window at lat j
         m1 = j - (ltrd - 1)
@@ -101,29 +93,41 @@ def rb_gaussian(II, JJ, lon_d, lat_d, data, mask, frad, fltr_type):
         y1 = r*np.cos(lat[j])*np.sin(lon[0])
         z1 = r*np.sin(lat[j])
 
+        # TIMING parts:
+        filter_start = datetime.now()
+        lat_test = np.zeros((II, JJ))
+        lon_test = np.zeros((II, JJ))
+
+        d = np.zeros((II, JJ))
+
         for m in range(m1, m2):
             for n in range(II):
                 x2 = r*np.cos(lat[m])*np.cos(lon[n])
                 y2 = r*np.cos(lat[m])*np.sin(lon[n])
                 z2 = r*np.sin(lat[m])
+                # lat_test[n, m] = lat[m]
+                # lon_test[n, m] = lon[n]
 
                 sd = np.sqrt((x1 - x2)**2 + (y1 - y2)**2 + (z1 - z2)**2)
                 ang = 2.0 * np.arcsin(0.5*sd/r)
-                d = r * ang
-                if fltr_type == 'box' and d <= frad:
-                    fltr[n,m] = 1.0
-                if fltr_type == 'gsn' and d <= 10.0 * sigma:
-                    fltr[n,m] = np.exp(-0.5 * d**2/ sigma**2)/(np.sqrt(2*math.pi) *sigma)
-                if fltr_type == 'tgn' and d <= 2*frad:
-                    fltr[n,m] = np.exp(-0.5 * d**2/ sigma**2)/(np.sqrt(2*math.pi) *sigma)
-                # Think the following may be the wrong way around
-                if fltr_type == 'han' and d <= 2*frad:
-                    fltr[n,m] = 0.54 + 0.46*np.cos(d* math.pi/(2*frad))
-                if fltr_type == 'ham' and d <= 2*frad:
-                    fltr[n,m] = 0.5 + 0.5*np.cos(d*math.pi/(2*frad))
-        # plt.imshow(fltr)
-        # plt.show()
-        
+                # d = r * ang
+                d[n, m] = r * ang
+                # if fltr_type == 'box' and d <= frad:
+                #     fltr[n,m] = 1.0
+                # if fltr_type == 'gsn' and d <= 10.0 * sigma:
+                #     fltr[n,m] = np.exp(-0.5 * d**2/ sigma**2)/(np.sqrt(2*math.pi) *sigma)
+                # if fltr_type == 'tgn' and d <= 2*frad:
+                #     fltr[n,m] = np.exp(-0.5 * d**2/ sigma**2)/(np.sqrt(2*math.pi) *sigma)
+                # # Think the following may be the wrong way around
+                # if fltr_type == 'han' and d <= 2*frad:
+                #     fltr[n,m] = 0.54 + 0.46*np.cos(d* math.pi/(2*frad))
+                # if fltr_type == 'ham' and d <= 2*frad:
+                #     fltr[n,m] = 0.5 + 0.5*np.cos(d*math.pi/(2*frad))
+
+        valid_mask = np.less_equal(d, 10.0 * sigma)
+        out = np.exp(-0.5 * d ** 2 / sigma ** 2) / (np.sqrt(2 * math.pi) * sigma) * valid_mask
+        fltr[:, m1:m2] = out[:, m1:m2]
+
         for i in range(II):
             # print('i,j: ', i, j)
             if mask[i,j]==0.0:
@@ -135,23 +139,35 @@ def rb_gaussian(II, JJ, lon_d, lat_d, data, mask, frad, fltr_type):
                     tfltr[:i-1,:] = fltr[II-i+1:,:]
                     tfltr[i-1:,:] = fltr[:II-i+1,:]
 
-                # Apply filter
-                sm = 0.0
-                for n in range(II):
-                    for m in range(m1, m2):
-                        if tfltr[n,m] !=0.0 and mask[n,m]==0.0:
-                            sdata[i,j] = sdata[i,j] + tfltr[n,m]*data[n,m]
-                            sm = sm+tfltr[n,m]
+                # # # Apply filter
+                # # sm = 0.0
+
+                # for n in range(II):
+                #     for m in range(m1, m2):
+                #         if tfltr[n,m] !=0.0 and mask[n,m]==0.0:
+                # #             sdata[i,j] = sdata[i,j] + tfltr[n,m]*data[n,m]
+                #             sm = sm+tfltr[n,m]
+                
+                # Compute land mask between m1 and m2 - land is zero here
+                land_mask = np.logical_not(mask[:, m1:m2])
+
+                # Compute convolution between filter and data, ignoring land pixels
+                sdata[i, j] = np.sum(tfltr[:, m1:m2] * data[:, m1:m2] * land_mask)
+
+                # Calculate sum of filter between m1 and m2, ignoring land pixels
+                sm = np.sum(tfltr[:, m1:m2] * land_mask)
+
 
                 # print(i, j, sm, np.sum(tfltr), np.sum(fltr))
                 if sm!=0.0:
                     sdata[i,j] = sdata[i,j]/sm
-                rsd[i,j] = data[i,j]-sdata[i,j]
+                #rsd[i,j] = data[i,j]-sdata[i,j]
+
         # plt.imshow(sdata)
         # plt.show()
     print('rb filter outputs: ', sdata.shape, rsd.shape)
     # remove first row j = 0
-    return sdata[1:, :], rsd[1:, :]
+    return sdata[1:, :]
 
 def main():
     pass

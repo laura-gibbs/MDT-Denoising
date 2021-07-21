@@ -4,6 +4,10 @@ import math
 import os
 
 
+def norm(a):
+    return (a - a.min()) / (a.max() - a.min())
+
+
 def define_dims(resolution):
     r"""
     Input arguments: resolution
@@ -20,23 +24,6 @@ def extract_region(mdt, lon_range, lat_range, central_lon=0, central_lat=0):
     py = ((lat_range[0] + 90) * res, (lat_range[1] + 90) * res)
 
     return mdt[py[0]:py[1], px[0]:px[1]]
-
-
-def apply_gaussian(arr, sigma=1.6, bd=-1.5):
-    V = arr.copy()
-    mask = np.ones_like(arr)
-    mask[np.isnan(arr)] = np.nan
-    V[np.isnan(arr)] = 0
-    VV = gaussian_filter(V, sigma=sigma)
-
-    W = 0*arr.copy() + 1
-    W[np.isnan(arr)] = 0
-    WW = gaussian_filter(W, sigma=sigma)
-
-    arr = VV/WW * mask
-    # arr[np.isnan(arr)] = bd
-
-    return arr
 
 
 def create_coords(resolution, central_lon=0, rads=False):
