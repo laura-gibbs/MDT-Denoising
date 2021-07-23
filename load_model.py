@@ -134,7 +134,6 @@ def compute_avg_residual(arrs, reference):
         reference(arr): single reference array 
     """
     residual = arrs - reference
-    print('arr and refs shape', arrs.shape, reference.shape)
     avg_residual = np.mean(arrs - reference, axis=0)
     return avg_residual
 
@@ -146,16 +145,8 @@ def compute_avg_rmsd(arrs, reference, **kwargs):
         reference(arr)
     """
     residuals = arrs - reference
-    print("RESIDUALS.SHAPE", residuals.shape, arrs.shape, reference.shape)
     rmsds = np.array([compute_rmsd(residual, **kwargs) for residual in residuals])
-    # for i in range(rmsds.shape[0]):
-    #     plt.imshow(rmsds[i, 0])
-    #     plt.show()
-    print("RMSDS.SHAPE", rmsds.shape)
-    # print('here', np.mean(rmsds, axis=0).shape)
     return np.mean(rmsds, axis=0)
-
-
 
 
 def compute_rmsd(residual, hw_size=5, mask=None, res=4):
@@ -231,7 +222,7 @@ def get_plot_params(mdt=False, rmse=False, residual=False):
     return vmin, vmax, cticks
 
 
-def create_subplot(data, regions, mdt=False, rmse=False, residual=False, cols=3, crs=ccrs.PlateCarree(), titles=None, big_title=None, cmaps=None):
+def create_subplot(data, regions, mdt=False, rmse=False, residual=False, cols=3, crs=ccrs.PlateCarree(), titles=None, big_title=None, cmaps=None, ax_labels=None):
     vmin, vmax, cticks = get_plot_params(mdt, rmse, residual)
     if cmaps is None:
         if rmse:
@@ -251,9 +242,10 @@ def create_subplot(data, regions, mdt=False, rmse=False, residual=False, cols=3,
             x, y = regions[i * len(axrow) + j]
             # w, h = tensor[j, 0].shape
             lons, lats, extent = get_spatial_params(x, y)
-            print("ERROR", data[i * len(axrow) + j].shape)
             im = plot_region(data[i * len(axrow) + j], ax, lons, lats, extent, vmin=vmin, vmax=vmax, cmap=cmaps[i * len(axrow) + j])
             ax.set_title(titles[i * len(axrow) + j])
+            if ax_labels is not None:
+                ax.set_ylabel(ax_labels[i], fontsize=9)
     cbarheight = 0.75
     bottom_pos = (1 - cbarheight)/2 - 0.005
     cbarwidth = 0.01
@@ -262,9 +254,9 @@ def create_subplot(data, regions, mdt=False, rmse=False, residual=False, cols=3,
     cbar_ax.tick_params(labelsize=9)
     cbar = fig.colorbar(im, cax=cbar_ax, ticks=np.linspace(vmin, vmax, num=cticks))#, orientation='horizontal')
     if big_title is not None:
-        fig.suptitle(big_title, fontsize=16)
-    # fig.tight_layout()
+        fig.suptitle(big_title, fontsize=12)
     fig.subplots_adjust(top=0.88)
+    plt.tight_layout()
     plt.show()
     plt.close()
 
@@ -274,6 +266,24 @@ def calculate_rmse(x, y, normalise=False):
         x, y = norm(x), norm(y)
     return np.sqrt(np.mean((x - y)**2))
     
+
+
+# def standard_gaussian():
+    # # Calculate Standard Gaussian Filtered Geodetic MDTs and RMSE/SSIM between Gauss vs NEMO and Model vs NEMO
+    # # FWH_pixels  = 2.355 * sigma
+    # # FWH_km = (FWH_pixels / 4) * 111
+    # kms = np.arange(25, 501, 25)
+    # sigmas = ((kms * 4) / 111) / 2.355
+    # gauss_avg_rmses = []
+    # # gauss_avg_ssim = []
+    # for sigma in sigmas:
+    #     gauss_images = [apply_gaussian(image, sigma) for image in g_images]
+    #     gauss_images = np.array(gauss_images)
+    #     gauss_avg_rmses.append(calculate_rmse(gauss_images, target[:, 0]))
+    #     gauss_filtered.append(gauss_images[1])
+    #     # gauss_avg_ssim.append(np.mean([ssim(nemo_image[0], gauss_image[0]) for nemo_image, gauss_image in zip(nemo, gauss_images)]))
+
+
 
 def main():
     mdt = False
@@ -285,39 +295,35 @@ def main():
         var = 'cs'
 
     model = ConvAutoencoder()
-    # # model.load_state_dict(torch.load(f'./models/exp_epochs_{var}/{n_epochs}e_{var}_model_cdae.pth'))
     model.eval()
-
-    # dataset = CAEDataset(region_dir=f'../a_mdt_data/HR_model_data/small_testing_{var}', quilt_dir=f'./quilting/DCGAN_{var}', mdt=mdt)
-    # dataset = CAEDataset(region_dir=f'../a_mdt_data/testing_geodetic_data/{var}', quilt_dir=None, mdt=mdt)
-    # t_dataset = CAEDataset(region_dir=f'../a_mdt_data/HR_model_data/small_testing_{var}', quilt_dir=None, mdt=mdt)
-    # t_dataset = CAEDataset(region_dir=f'../a_mdt_data/HR_model_data/orca_{var}_regions', quilt_dir=None, mdt=mdt)
-    # t_dataset = CAEDataset(region_dir=f'../a_mdt_data/HR_model_data/cls18_{var}_regions', quilt_dir=None, mdt=mdt)
 
     batch_size = 6
     batch_intersect = 0
     x_coords = [0, 128, 128, 256, 256, 384, 384, 512]#, 512, 768, 768, 768, 768, 896, 896, 896] # 640, 640, 640, 640
     y_coords = [488, 360, 488, 360, 488, 360, 488, 232]#, 488, 104, 232, 360, 488, 232, 360, 488] # 104, 232, 360, 488
 
-    x, y = 0, 488
+    # Gulf Stream
+    # x, y = 1088, 168
+    # Agulhas 
+    # x, y = 32, 456
     n_epochs = 160
+    x, y = 0, 488
 
     # 'orca' or 'cls'
     ref_var = 'orca'
 
-      # Only one region needed as reference for geodetic data
+    # Only one region needed as reference for geodetic data
     # -----------------------------------------------
-    
-    geodetic = True
+    geodetic = False
     if geodetic:
-        dataset = CAEDataset(region_dir=f'../a_mdt_data/testing_geodetic_data/{var}', quilt_dir=None, mdt=mdt)
-        t_dataset = CAEDataset(region_dir=f'../a_mdt_data/HR_model_data/{ref_var}_{var}_regions', quilt_dir=None, mdt=mdt)
+        dataset = CAEDataset(region_dir=f'../a_mdt_data/new_testing_geodetic_data/{var}', quilt_dir=None, mdt=mdt)
+        t_dataset = CAEDataset(region_dir=f'../a_mdt_data/HR_model_data/new_{ref_var}_{var}_regions', quilt_dir=None, mdt=mdt)
         network_images = dataset.get_regions(x, y)
         network_images = torch.stack(network_images)
         target = t_dataset.get_regions(x,y)[0]
     else:
-        dataset = CAEDataset(region_dir=f'../a_mdt_data/HR_model_data/small_{var}_testing', quilt_dir=f'./quilting/DCGAN_{var}', mdt=mdt)
-        t_dataset = CAEDataset(region_dir=f'../a_mdt_data/HR_model_data/small_{var}_testing', quilt_dir=None, mdt=mdt)
+        dataset = CAEDataset(region_dir=f'../a_mdt_data/HR_model_data/new_{ref_var}_{var}_regions', quilt_dir=f'./quilting/DCGAN_{var}', mdt=mdt)
+        t_dataset = CAEDataset(region_dir=f'../a_mdt_data/HR_model_data/new_{ref_var}_{var}_regions', quilt_dir=None, mdt=mdt) #small_{var}_testing
         network_images = dataset.get_regions(x, y)
         network_images = torch.stack(network_images)
         target = t_dataset.get_regions(x,y)
@@ -330,43 +336,16 @@ def main():
     mask = land_false(images)[0]
     target = target * mask
     images = images * mask
+    plt.imshow(target[0], cmap='turbo')
+    plt.show()
 
     gauss_filtered = []
-
-    # ------------------------------------------
-    # Calculate Standard Gaussian Filtered Geodetic MDTs and RMSE/SSIM between Gauss vs NEMO and Model vs NEMO
-    # FWH_pixels  = 2.355 * sigma
-    # FWH_km = (FWH_pixels / 4) * 111
-    # kms = np.arange(25, 501, 25)
-    # sigmas = ((kms * 4) / 111) / 2.355
-    # gauss_avg_rmses = []
-    # # gauss_avg_ssim = []
-    # for sigma in sigmas:
-    #     gauss_images = [apply_gaussian(image, sigma) for image in g_images]
-    #     gauss_images = np.array(gauss_images)
-    #     gauss_avg_rmses.append(calculate_rmse(gauss_images, target[:, 0]))
-    #     print('sigma', sigma, 'rmse', gauss_avg_rmses[-1], gauss_images.shape)
-    #     gauss_filtered.append(gauss_images[1])
-    #     # gauss_avg_ssim.append(np.mean([ssim(nemo_image[0], gauss_image[0]) for nemo_image, gauss_image in zip(nemo, gauss_images)]))
-    # print('gauss rmse:', gauss_avg_rmses)
-    # # print('gauss ssim:', gauss_avg_ssim)
-
-    # print(gauss_filtered[0].shape)
-    # fig, axs = plt.subplots(4, len(gauss_filtered) // 4)
-    # print(5, len(gauss_filtered) // 4)
-    # for i in range(len(axs)):
-    #     for j in range(len(axs)):
-    #         axs[i][j].imshow(gauss_filtered[i+j*4][0])
-    # plt.show()
-    # plt.close()
 
     
     # Calculate Gaussian filtered MDT using rb_gaussian across multiple filter radii
     # --------------------------------------------
-    # sigmas = [10000, 50000, 100000]#, 150000, 200000]
     sigmas = np.arange(10000, 150001, 10000)
-    # sigmas = [10000] * 15
-    # 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
+    # sigmas = [10000] * 14 + [50000]
     II, JJ = 128, 128
     gauss_rmsds = []
     gauss_avg_rmsds = []
@@ -385,12 +364,11 @@ def main():
         print('GAUSS RMSD SHAPE: ', gauss_rmsd.shape, gauss_rmsd)
         # Number of sigmas x 128 x 128
         gauss_rmsds.append(gauss_rmsd)
-        # print('gauss rmsd shape: ', gauss_rmsd.shape)
 
         # For line graph: 2
         gauss_avg_rmsds.append(np.mean(gauss_rmsd))
     print('GAUSS RMSDS SHAPE: ', len(gauss_rmsds), gauss_rmsds)
-    # Following means the pixelwise plots and gives out 1 value per sigma value
+    # Following means pixelwise plots and gives out 1 value per sigma value
     print('GAUSS AVG RMSDS SHAPE: ', len(gauss_avg_rmsds), gauss_avg_rmsds)
 
 
@@ -452,9 +430,23 @@ def main():
     a = 5
     epoch_inc = 25
     epochs = [a * r ** i for i in range(6)]
-    model_filepaths = [f'./models/vanilla_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
-    rmsds, avg_residuals, network_avg_rmsds, network_outputs, residuals = test_multiple_models(model_filepaths)
+    vanilla_filepaths = [f'./models/vanilla_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
+    rmsds, avg_residuals, network_avg_rmsds, network_outputs, residuals = test_multiple_models(vanilla_filepaths)
 
+    aug_filepaths = [f'./models/aug_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
+    aug_rmsds, aug_avg_residuals, aug_network_avg_rmsds, aug_network_outputs, aug_residuals = test_multiple_models(aug_filepaths)
+
+    multiscale_loss_filepaths = [f'./models/multiscale_loss_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
+    ms_rmsds, ms_avg_residuals, ms_network_avg_rmsds, ms_network_outputs, ms_residuals = test_multiple_models(multiscale_loss_filepaths)
+
+    aug_multiscale_loss_filepaths = [f'./models/aug_multiscale_loss_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
+    aug_ms_rmsds, aug_ms_avg_residuals, aug_ms_network_avg_rmsds, aug_ms_network_outputs, aug_ms_residuals = test_multiple_models(aug_multiscale_loss_filepaths)
+
+    WAE_loss_filepaths = [f'./models/WAE_vanilla_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
+    WAE_rmsds, WAE_avg_residuals, WAE_network_avg_rmsds, WAE_network_outputs, WAE_residuals = test_multiple_models(WAE_loss_filepaths)
+
+    WAE_coast_filepaths = [f'./models/coast_WAE_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
+    WAE_coast_rmsds, WAE_coast_avg_residuals, WAE_coast_network_avg_rmsds, WAE_coast_network_outputs, WAE_coast_residuals = test_multiple_models(WAE_coast_filepaths)
 
     # Providing first images for following subplots (Gaussian filtered for RMSD and Unfiltered for Residuals)
     # -----------------------------------------------
@@ -466,16 +458,17 @@ def main():
     #
     # -----------------------------------------------
     indices = [0,3,6,9,12,14]
-    plot_list = [network_outputs[i][0][0] for i in range(6)] + [gauss_filtered[i][0] for i in indices]
-    plot_titles = [f'{epoch} epochs' for epoch in epochs] + [f'filter radius: {sigmas[i]//1000}km' for i in indices]
+    plot_list = [network_outputs[i][0][0] for i in range(6)] + [WAE_network_outputs[i][0][0] for i in range(6)] + [WAE_coast_network_outputs[i][0][0] for i in range(6)] + [gauss_filtered[i][0] for i in indices]
+    plot_titles = [f'{epoch} epochs' for epoch in epochs]*3 + [f'filter radius: {sigmas[i]//1000}km' for i in indices]
     create_subplot(plot_list, [[x, y]] * len(plot_list), cols=6, titles=plot_titles)
     plt.show()
+
 
     #
     # -----------------------------------------------
     indices = [0, 2, 5]
-    plot_list = [images[0]] + [network_outputs[i][0][0] for i in indices]
-    create_subplot(plot_list, [[x, y]] * len(plot_list), cols=4)
+    plot_list = [images[0]] + [network_outputs[i][0][0] for i in indices] + [target[0]]
+    create_subplot(plot_list, [[x, y]] * len(plot_list), cols=5)
     plt.show()
     plot_list = [images[0]-target[0]] + [network_outputs[i][0][0]-target[0] for i in indices]
     create_subplot(plot_list, [[x, y]] * len(plot_list), residual=True, cols=4)
@@ -514,18 +507,39 @@ def main():
     _, _, ms_avg_rmsds, _, _ = test_multiple_models(ms_model_filepaths)
     plt.plot(epochs, ms_avg_rmsds)
 
-    # aug_multi_filepaths = [f'./models/aug_multiscale_loss_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
-    # _, _, aug_multi_avg_rmsds, _, _ = test_multiple_models(aug_multi_filepaths)
-    # plt.plot(epochs, aug_multi_avg_rmsds)
+    aug_multi_filepaths = [f'./models/aug_multiscale_loss_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
+    _, _, aug_multi_avg_rmsds, _, _ = test_multiple_models(aug_multi_filepaths)
+    plt.plot(epochs, aug_multi_avg_rmsds)
 
     plt.axhline(y=np.min(gauss_avg_rmsds), color='r', linestyle='dashed')
-    plt.legend(['Vanilla', 'Augmentation', 'Multiscale Loss', 'Gaussian filter'], loc ="upper right")
+    plt.legend(['Vanilla', 'Augmentation', 'Multiscale Loss', 'Multiscale Loss + Augmentation', 'Gaussian filter'], loc ="upper right")
     plt.xlabel('Number of Epochs', fontsize=12)
     plt.ylabel('RMSE', fontsize=12)
     # plt.ylim(bottom=0.14, top=0.23)
     plt.title('RMSE of Different Filtering Methods Against ' + ref_var + ' Data')
     plt.show()
     plt.close()
+
+    vanilla_model_filepaths = [f'./models/vanilla_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
+    _, _, vanilla_avg_rmsds, _, _ = test_multiple_models(vanilla_model_filepaths)
+    plt.plot(epochs, vanilla_avg_rmsds)
+
+    WAE_model_filepaths = [f'./models/WAE_vanilla_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
+    _, _, WAE_avg_rmsds, _, _ = test_multiple_models(WAE_model_filepaths)
+    plt.plot(epochs, WAE_avg_rmsds)
+
+    WAE_coast_filepaths = [f'./models/coast_WAE_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
+    _, _, WAE_coast_avg_rmsds, _, _ = test_multiple_models(WAE_coast_filepaths)
+    plt.plot(epochs, WAE_coast_avg_rmsds)
+
+    plt.axhline(y=np.min(gauss_avg_rmsds), color='r', linestyle='dashed')
+    plt.legend(['GAN Noise', 'WAE Noise', 'WAE Noise trained on coastal regions', 'Gaussian filter'], loc ="upper right")
+    plt.xlabel('Number of Epochs', fontsize=12)
+    plt.ylabel('RMSE', fontsize=12)
+    plt.title('RMSE of Different Filtering Methods Against ' + ref_var + ' Data')
+    plt.show()
+    plt.close()
+
 
 
     rmses = []
