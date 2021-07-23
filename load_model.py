@@ -305,9 +305,9 @@ def main():
     # Gulf Stream
     # x, y = 1088, 168
     # Agulhas 
-    # x, y = 32, 456
+    x, y = 32, 456
     n_epochs = 160
-    x, y = 0, 488
+    # x, y = 0, 488
 
     # 'orca' or 'cls'
     ref_var = 'orca'
@@ -322,7 +322,7 @@ def main():
         network_images = torch.stack(network_images)
         target = t_dataset.get_regions(x,y)[0]
     else:
-        dataset = CAEDataset(region_dir=f'../a_mdt_data/HR_model_data/new_{ref_var}_{var}_regions', quilt_dir=f'./quilting/DCGAN_{var}', mdt=mdt)
+        dataset = CAEDataset(region_dir=f'../a_mdt_data/HR_model_data/new_{ref_var}_{var}_regions', quilt_dir=f'./quilting/WAE_MMD2_{var}', mdt=mdt)
         t_dataset = CAEDataset(region_dir=f'../a_mdt_data/HR_model_data/new_{ref_var}_{var}_regions', quilt_dir=None, mdt=mdt) #small_{var}_testing
         network_images = dataset.get_regions(x, y)
         network_images = torch.stack(network_images)
@@ -458,8 +458,8 @@ def main():
     #
     # -----------------------------------------------
     indices = [0,3,6,9,12,14]
-    plot_list = [network_outputs[i][0][0] for i in range(6)] + [WAE_network_outputs[i][0][0] for i in range(6)] + [WAE_coast_network_outputs[i][0][0] for i in range(6)] + [gauss_filtered[i][0] for i in indices]
-    plot_titles = [f'{epoch} epochs' for epoch in epochs]*3 + [f'filter radius: {sigmas[i]//1000}km' for i in indices]
+    plot_list = [WAE_network_outputs[i][0][0] for i in range(6)] + [WAE_coast_network_outputs[i][0][0] for i in range(6)] + [gauss_filtered[i][0] for i in indices]
+    plot_titles = [f'{epoch} epochs' for epoch in epochs]*2 + [f'filter radius: {sigmas[i]//1000}km' for i in indices]
     create_subplot(plot_list, [[x, y]] * len(plot_list), cols=6, titles=plot_titles)
     plt.show()
 
@@ -467,10 +467,10 @@ def main():
     #
     # -----------------------------------------------
     indices = [0, 2, 5]
-    plot_list = [images[0]] + [network_outputs[i][0][0] for i in indices] + [target[0]]
+    plot_list = [images[0]] + [WAE_coast_network_outputs[i][0][0] for i in indices] + [target[0]]
     create_subplot(plot_list, [[x, y]] * len(plot_list), cols=5)
     plt.show()
-    plot_list = [images[0]-target[0]] + [network_outputs[i][0][0]-target[0] for i in indices]
+    plot_list = [images[0]-target[0]] + [WAE_coast_network_outputs[i][0][0]-target[0] for i in indices]
     create_subplot(plot_list, [[x, y]] * len(plot_list), residual=True, cols=4)
     plt.show()
 
@@ -520,9 +520,9 @@ def main():
     plt.show()
     plt.close()
 
-    vanilla_model_filepaths = [f'./models/vanilla_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
-    _, _, vanilla_avg_rmsds, _, _ = test_multiple_models(vanilla_model_filepaths)
-    plt.plot(epochs, vanilla_avg_rmsds)
+    # vanilla_model_filepaths = [f'./models/vanilla_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
+    # _, _, vanilla_avg_rmsds, _, _ = test_multiple_models(vanilla_model_filepaths)
+    # plt.plot(epochs, vanilla_avg_rmsds)
 
     WAE_model_filepaths = [f'./models/WAE_vanilla_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
     _, _, WAE_avg_rmsds, _, _ = test_multiple_models(WAE_model_filepaths)
@@ -533,7 +533,7 @@ def main():
     plt.plot(epochs, WAE_coast_avg_rmsds)
 
     plt.axhline(y=np.min(gauss_avg_rmsds), color='r', linestyle='dashed')
-    plt.legend(['GAN Noise', 'WAE Noise', 'WAE Noise trained on coastal regions', 'Gaussian filter'], loc ="upper right")
+    plt.legend(['WAE Noise', 'WAE Noise trained on coastal regions', 'Gaussian filter'], loc ="upper right")
     plt.xlabel('Number of Epochs', fontsize=12)
     plt.ylabel('RMSE', fontsize=12)
     plt.title('RMSE of Different Filtering Methods Against ' + ref_var + ' Data')
