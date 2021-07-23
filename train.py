@@ -25,14 +25,16 @@ def interpolate(img, scale):
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 transform = transforms.ToTensor()
 
+#------Set the following------
 mdt = False
 n_epochs = 200
 if mdt:
     var = 'mdt'
 else:
     var = 'cs'
-# Amend following code for my data
-transform = True
+
+#-------Set the following------
+transform = False
 if transform:
     transforms = A.Compose([
                     A.augmentations.geometric.rotate.RandomRotate90(),
@@ -41,23 +43,22 @@ if transform:
 else:
     transforms = None
 
-multiscale_loss = True
+#------Set the following---------
+multiscale_loss = False
 if multiscale_loss:
     scales = [0.25, 0.5, 1, 2, 4]
 else:
     scales = [1]
 
 train_data = CAEDataset(
-    region_dir=f'../a_mdt_data/HR_model_data/{var}_training_regions',
-    quilt_dir=f'./quilting/DCGAN_{var}',
+    region_dir=f'../a_mdt_data/HR_model_data/coast_{var}_training_regions',
+    quilt_dir=f'./quilting/WAE_MMD2_{var}',
     mdt=mdt,
     transform=transforms
-    #write what I want - transforms.compose which allows to connect a bunch together
-    # check whether the target and input transforms need to be fixed to be the same
 )
 test_data = CAEDataset(
-    region_dir=f'../a_mdt_data/HR_model_data/{var}_testing_regions',
-    quilt_dir=f'./quilting/DCGAN_{var}',
+    region_dir=f'../a_mdt_data/HR_model_data/coast_{var}_testing_regions',
+    quilt_dir=f'./quilting/WAE_MMD2_{var}',
     mdt=mdt
     )
 
@@ -116,10 +117,10 @@ for epoch in range(1, n_epochs+1):
             ))
         
         if epoch == 5:
-            torch.save(model.state_dict(), f'models/aug_multiscale_loss_{var}/{epoch}e_{var}_model_cdae.pth')
+            torch.save(model.state_dict(), f'models/coast_WAE_{var}/{epoch}e_{var}_model_cdae.pth')
 
         if epoch in save_epochs:
-            torch.save(model.state_dict(), f'models/aug_multiscale_loss_{var}/{epoch}e_{var}_model_cdae.pth')
+            torch.save(model.state_dict(), f'models/coast_WAE_{var}/{epoch}e_{var}_model_cdae.pth')
 
 
 # torch.save(model.state_dict(), f'models/{n_epochs}e_{var}_model_cdae.pth')
@@ -131,7 +132,7 @@ inputs = inputs.cpu().numpy()
 output = output.view(batch_size, 1, 128, 128)
 output = output.detach().cpu().numpy()
 
-# Consider whether it needs normalising?
+# Consider whether it needs normalising
 # output = (output - output.min()) / (output.max() - output.min())
 # output = output.clip(0, 1)
 if mdt:
