@@ -12,6 +12,7 @@ import cartopy.crs as ccrs
 from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
 from cartopy.feature import GSHHSFeature
 from trad_filters.gaussian_filter import rb_gaussian, apply_gaussian
+from matplotlib.patches import Circle
 
 from skimage.metrics import structural_similarity as ssim
 import cv2
@@ -303,18 +304,22 @@ def main():
     y_coords = [488, 360, 488, 360, 488, 360, 488, 232]#, 488, 104, 232, 360, 488, 232, 360, 488] # 104, 232, 360, 488
 
     # Gulf Stream
-    # x, y = 1088, 168
+    x, y = 1088, 168
     # Agulhas 
-    x, y = 32, 456
+    # x, y = 32, 456
     n_epochs = 160
     # x, y = 0, 488
+
+    # circle coords
+    circ1 = Circle((33, 80), 2.5, facecolor='None', edgecolor='w', lw=2)
+    circ2 = Circle((46, 58), 2.5, facecolor='None', edgecolor='w', lw=2, zorder=10)
 
     # 'orca' or 'cls'
     ref_var = 'orca'
 
     # Only one region needed as reference for geodetic data
     # -----------------------------------------------
-    geodetic = False
+    geodetic = True
     if geodetic:
         dataset = CAEDataset(region_dir=f'../a_mdt_data/new_testing_geodetic_data/{var}', quilt_dir=None, mdt=mdt)
         t_dataset = CAEDataset(region_dir=f'../a_mdt_data/HR_model_data/new_{ref_var}_{var}_regions', quilt_dir=None, mdt=mdt)
@@ -336,7 +341,10 @@ def main():
     mask = land_false(images)[0]
     target = target * mask
     images = images * mask
-    plt.imshow(target[0], cmap='turbo')
+    fig, ax = plt.subplots(1)
+    ax.imshow(target[0], cmap='turbo')
+    ax.add_patch(circ1)
+    ax.add_patch(circ2)
     plt.show()
 
     gauss_filtered = []
@@ -344,8 +352,8 @@ def main():
     
     # Calculate Gaussian filtered MDT using rb_gaussian across multiple filter radii
     # --------------------------------------------
-    sigmas = np.arange(10000, 150001, 10000)
-    # sigmas = [10000] * 14 + [50000]
+    # sigmas = np.arange(10000, 150001, 10000)
+    sigmas = [10000] * 14 + [50000]
     II, JJ = 128, 128
     gauss_rmsds = []
     gauss_avg_rmsds = []
@@ -459,6 +467,14 @@ def main():
     # -----------------------------------------------
     indices = [0,3,6,9,12,14]
     plot_list = [WAE_network_outputs[i][0][0] for i in range(6)] + [WAE_coast_network_outputs[i][0][0] for i in range(6)] + [gauss_filtered[i][0] for i in indices]
+    print(len(plot_list))
+    print(plot_list[0].shape)
+    exact_vals = []
+    for i in range(len(plot_list)):
+        vals = plot_list[i, 33, 80]
+        print(vals.shape)
+        exact_vals.append(vals)
+
     plot_titles = [f'{epoch} epochs' for epoch in epochs]*2 + [f'filter radius: {sigmas[i]//1000}km' for i in indices]
     create_subplot(plot_list, [[x, y]] * len(plot_list), cols=6, titles=plot_titles)
     plt.show()
