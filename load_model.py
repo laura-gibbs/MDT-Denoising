@@ -310,10 +310,6 @@ def main():
     n_epochs = 160
     # x, y = 0, 488
 
-    # circle coords
-    circ1 = Circle((33, 80), 2.5, facecolor='None', edgecolor='w', lw=2)
-    circ2 = Circle((46, 58), 2.5, facecolor='None', edgecolor='w', lw=2, zorder=10)
-
     # 'orca' or 'cls'
     ref_var = 'orca'
 
@@ -337,6 +333,10 @@ def main():
     
     images, target = detach_tensors([network_images, target])
     images = np.squeeze(images, axis=1) 
+
+    # circle coords
+    circ1 = Circle((33, 80), 2.5, facecolor='None', edgecolor='w', lw=2)
+    circ2 = Circle((46, 58), 2.5, facecolor='None', edgecolor='w', lw=2, zorder=10)
     
     mask = land_false(images)[0]
     target = target * mask
@@ -345,6 +345,8 @@ def main():
     ax.imshow(target[0], cmap='turbo')
     ax.add_patch(circ1)
     ax.add_patch(circ2)
+    plt.text(33 + 5, 80 + 2, '1', color='white', fontsize=13)
+    plt.text(46 + 5, 58 + 2, '2', color='white', fontsize=13)
     plt.show()
 
     gauss_filtered = []
