@@ -352,8 +352,8 @@ def main():
     
     # Calculate Gaussian filtered MDT using rb_gaussian across multiple filter radii
     # --------------------------------------------
-    # sigmas = np.arange(10000, 150001, 10000)
-    sigmas = [10000] * 14 + [50000]
+    sigmas = np.arange(10000, 150001, 10000)
+    # sigmas = [10000] * 14 + [50000]
     II, JJ = 128, 128
     gauss_rmsds = []
     gauss_avg_rmsds = []
@@ -471,9 +471,11 @@ def main():
     print(plot_list[0].shape)
     exact_vals = []
     for i in range(len(plot_list)):
-        vals = plot_list[i, 33, 80]
+        vals = plot_list[i][33, 80]
+        print(vals)
         print(vals.shape)
         exact_vals.append(vals)
+    print("exact_vals", exact_vals)
 
     plot_titles = [f'{epoch} epochs' for epoch in epochs]*2 + [f'filter radius: {sigmas[i]//1000}km' for i in indices]
     create_subplot(plot_list, [[x, y]] * len(plot_list), cols=6, titles=plot_titles)
