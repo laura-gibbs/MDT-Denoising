@@ -52,13 +52,13 @@ else:
 
 train_data = CAEDataset(
     region_dir=f'../a_mdt_data/HR_model_data/coast_{var}_training_regions',
-    quilt_dir=f'./quilting/WAE_MMD2_{var}',
+    quilt_dir=f'./quilting/DCGAN_{var}',
     mdt=mdt,
     transform=transforms
 )
 test_data = CAEDataset(
     region_dir=f'../a_mdt_data/HR_model_data/coast_{var}_testing_regions',
-    quilt_dir=f'./quilting/WAE_MMD2_{var}',
+    quilt_dir=f'./quilting/DCGAN_{var}',
     mdt=mdt
     )
 
@@ -117,10 +117,10 @@ for epoch in range(1, n_epochs+1):
             ))
         
         if epoch == 5:
-            torch.save(model.state_dict(), f'models/coast_WAE_{var}/{epoch}e_{var}_model_cdae.pth')
+            torch.save(model.state_dict(), f'models/coast_GAN_{var}/{epoch}e_{var}_model_cdae.pth')
 
         if epoch in save_epochs:
-            torch.save(model.state_dict(), f'models/coast_WAE_{var}/{epoch}e_{var}_model_cdae.pth')
+            torch.save(model.state_dict(), f'models/coast_GAN_{var}/{epoch}e_{var}_model_cdae.pth')
 
 
 # torch.save(model.state_dict(), f'models/{n_epochs}e_{var}_model_cdae.pth')

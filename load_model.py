@@ -31,29 +31,16 @@ def mutual_information(hgram):
     return np.sum(pxy[nzs] * np.log(pxy[nzs] / px_py[nzs]))
 
 
-def discretize(target, output):
-    disc_output = output.copy()
-    disc_target = target.copy()
-    dmax = np.max(disc_output)
-    dmin = np.min(disc_output)
-    disc_output[disc_output < (dmax - dmin)/3] = dmin
-    disc_output[np.logical_and(disc_output > (dmax - dmin)/3, disc_output < (dmax - dmin)/3*2 )] = (dmax - dmin)/2
-    disc_output[disc_output > (dmax - dmin)/3*2] = dmax
-
-    disc_target[disc_target < (dmax - dmin)/3] = dmin
-    disc_target[np.logical_and(disc_target > (dmax - dmin)/3, disc_target < (dmax - dmin)/3*2 )] = (dmax - dmin)/2
-    disc_target[disc_target > (dmax - dmin)/3*2] = dmax
-
-    # target_norm = (target - np.min(output))/(np.max(output) - np.min(output))
-    residual = output[0,0] - target[0]
-    disc_residual = residual.copy()
-    dmax = np.max(residual)
-    dmin = np.min(residual)
-    # print(dmin, dmax)
-    disc_residual[np.logical_and(disc_residual > (dmax - dmin)/4, disc_residual < (dmax - dmin)/4*3 )] = (dmax - dmin)/2
-    disc_residual[disc_residual < (dmax - dmin)/4] = dmin
-    disc_residual[disc_residual > (dmax - dmin)/4*3] = dmax
-
+def discretize(arr, threshold=0.75):
+    disc_output = arr.copy()
+    # dmax = np.max(disc_output)
+    # dmin = np.min(disc_output)
+    # disc_output[disc_output < (dmax - dmin)/3] = dmin
+    # disc_output[np.logical_and(disc_output > (dmax - dmin)/3, disc_output < (dmax - dmin)/3*2 )] = (dmax - dmin)/2
+    # disc_output[disc_output > (dmax - dmin)/3*2] = dmax
+    disc_output[disc_output < threshold] = np.nan
+    # disc_output[np.nonzero(disc_output)] = 1
+    return disc_output
 
 
 class MidpointNormalize(mpl.colors.Normalize):
@@ -349,13 +336,20 @@ def main():
     plt.text(46 + 5, 58 + 2, '2', color='white', fontsize=13)
     plt.show()
 
+    print(target.shape)
+    disc_target = discretize(target[0])
+    print(disc_target.shape)
+    plt.imshow(disc_target)
+    plt.show()
+
+
     gauss_filtered = []
 
     
     # Calculate Gaussian filtered MDT using rb_gaussian across multiple filter radii
     # --------------------------------------------
-    sigmas = np.arange(10000, 150001, 10000)
-    # sigmas = [10000] * 14 + [50000]
+    # sigmas = np.arange(10000, 150001, 10000)
+    sigmas = [10000] * 14 + [50000]
     II, JJ = 128, 128
     gauss_rmsds = []
     gauss_avg_rmsds = []
@@ -452,6 +446,9 @@ def main():
     aug_multiscale_loss_filepaths = [f'./models/aug_multiscale_loss_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
     aug_ms_rmsds, aug_ms_avg_residuals, aug_ms_network_avg_rmsds, aug_ms_network_outputs, aug_ms_residuals = test_multiple_models(aug_multiscale_loss_filepaths)
 
+    GAN_coast_filepaths = [f'./models/coast_GAN_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
+    GAN_coast_rmsds, GAN_coast_avg_residuals, GAN_coast_network_avg_rmsds, GAN_coast_network_outputs, GAN_coast_residuals = test_multiple_models(GAN_coast_filepaths)
+
     WAE_loss_filepaths = [f'./models/WAE_vanilla_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
     WAE_rmsds, WAE_avg_residuals, WAE_network_avg_rmsds, WAE_network_outputs, WAE_residuals = test_multiple_models(WAE_loss_filepaths)
 
@@ -468,9 +465,10 @@ def main():
     #
     # -----------------------------------------------
     indices = [0,3,6,9,12,14]
-    plot_list = [WAE_network_outputs[i][0][0] for i in range(6)] + [WAE_coast_network_outputs[i][0][0] for i in range(6)] + [gauss_filtered[i][0] for i in indices]
+    plot_list = [GAN_coast_network_outputs[i][0][0] for i in range(6)] + [WAE_coast_network_outputs[i][0][0] for i in range(6)] + [gauss_filtered[i][0] for i in indices]
     print(len(plot_list))
     print(plot_list[0].shape)
+
     exact_vals = []
     for i in range(len(plot_list)):
         vals = plot_list[i][33, 80]
@@ -482,7 +480,17 @@ def main():
     plot_titles = [f'{epoch} epochs' for epoch in epochs]*2 + [f'filter radius: {sigmas[i]//1000}km' for i in indices]
     create_subplot(plot_list, [[x, y]] * len(plot_list), cols=6, titles=plot_titles)
     plt.show()
-
+    
+    print(len(plot_list))
+    plot_list = np.asarray(plot_list)
+    print(plot_list.shape)
+    disc_list = []
+    WAE_disc_list = [discretize(WAE_coast_network_outputs[i]) for i in range(len(WAE_coast_network_outputs))]
+    GAN_disc_list = [discretize(GAN_coast_network_outputs[i]) for i in range(len(GAN_coast_network_outputs))]
+    print('*', len(WAE_disc_list))
+    disc_plot_list = [GAN_disc_list[i][0][0] for i in range(6)] + [WAE_disc_list[i][0][0] for i in range(6)]
+    create_subplot(disc_plot_list, [[x, y]] * len(disc_plot_list), cols=6, titles=plot_titles)
+    plt.show()
 
     #
     # -----------------------------------------------
