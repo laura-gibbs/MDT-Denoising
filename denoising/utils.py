@@ -82,3 +82,41 @@ def read_surface(filename, path=None, fortran=True, nans=True,
         return np.rot90(floats, 1)
 
     return floats
+
+
+def write_surface(filename, arr, path=None, fortran=False, nan_mask=None,
+                  overwrite=False):
+    r"""
+    """
+    order = 'F' if fortran else 'C'
+ 
+    if path is None:
+        path = ""
+    filepath = os.path.join(path, filename)
+
+    if os.path.exists(filepath) and not overwrite:
+        raise OSError("File already exists. Pass overwrite=True to overwrite.")
+
+    if filepath[len(filepath)-4:] != '.dat':
+        filepath += '.dat'
+
+    arr = arr.astype('float32')
+    floats = arr.flatten(order=order)
+
+    if nan_mask is not None:
+        floats = floats * nan_mask
+    floats[np.isnan(floats)] = -1.9e+19
+
+    # Calculate header (number of total bytes in MDT)
+    print('array size = ', floats.size)
+    header = np.array(arr.size * 4)
+
+    # Convert everything to bytes and write
+    floats = floats.tobytes()
+    header = header.tobytes()
+    footer = header
+    fid = open(filepath, mode='wb')
+    fid.write(header)
+    fid.write(floats)
+    fid.write(footer)
+    fid.close()

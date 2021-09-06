@@ -36,10 +36,13 @@ class CAEDataset(Dataset):
             if x == a and y == b:
                 indices.append(i)
         regions = []
+        region_fnames = []
         for i in indices:
             region, _ = self[i]
             regions.append(region)
-        return regions
+            region_fname = os.path.split(self.paths[i])[-1]
+            region_fnames.append(region_fname)
+        return regions, region_fnames
 
 
     def __getitem__(self, idx):

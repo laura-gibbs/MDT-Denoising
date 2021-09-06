@@ -26,7 +26,7 @@ device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 transform = transforms.ToTensor()
 
 #------Set the following------
-mdt = False
+mdt = True
 n_epochs = 200
 if mdt:
     var = 'mdt'

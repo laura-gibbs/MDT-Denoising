@@ -22,12 +22,14 @@ def apply_gaussian(arr, sigma=3, bd=-1.5):
     return arr
 
 
-def rb_gaussian(II, JJ, lon_d, lat_d, data, mask, frad, fltr_type):
+def rb_filter(II, JJ, lon_d, lat_d, data, mask, frad, fltr_type):
     r = 6378136.3
     sigma = frad/np.sqrt(2.0*np.log(2.0))
     print('sigma: ', sigma)
-        
+    print(lon_d.shape, lat_d.shape)
     print('data shape ', data.shape)
+    print('mask shape ', mask.shape)
+
     # Hacky fix
     II = II + 1
     lon_d = np.insert(lon_d, 0, lon_d[0] - (lon_d[1] - lon_d[0]))

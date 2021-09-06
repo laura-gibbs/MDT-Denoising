@@ -1,4 +1,5 @@
 from random import gauss
+import os
 import torch
 from denoising.models import ConvAutoencoder
 import numpy as np
@@ -11,8 +12,9 @@ from utils.utils import get_spatial_params
 import cartopy.crs as ccrs
 from cartopy.mpl.ticker import LongitudeFormatter, LatitudeFormatter
 from cartopy.feature import GSHHSFeature
-from trad_filters.gaussian_filter import rb_gaussian, apply_gaussian
+from trad_filters.gaussian_filter import rb_filter, apply_gaussian
 from matplotlib.patches import Circle
+from denoising.utils import write_surface, read_surface
 
 from skimage.metrics import structural_similarity as ssim
 import cv2
@@ -38,8 +40,11 @@ def discretize(arr, threshold=0.75):
     # disc_output[disc_output < (dmax - dmin)/3] = dmin
     # disc_output[np.logical_and(disc_output > (dmax - dmin)/3, disc_output < (dmax - dmin)/3*2 )] = (dmax - dmin)/2
     # disc_output[disc_output > (dmax - dmin)/3*2] = dmax
-    disc_output[disc_output < threshold] = np.nan
-    # disc_output[np.nonzero(disc_output)] = 1
+    disc_output[arr < threshold] = np.nan
+    # while np.isnan(disc_output).all() and threshold > 0:
+    #     threshold = threshold - 0.1
+    #     disc_output[arr < threshold] = np.nan
+    disc_output[~np.isnan(disc_output)] = 1
     return disc_output
 
 
@@ -285,8 +290,6 @@ def main():
     model = ConvAutoencoder()
     model.eval()
 
-    batch_size = 6
-    batch_intersect = 0
     x_coords = [0, 128, 128, 256, 256, 384, 384, 512]#, 512, 768, 768, 768, 768, 896, 896, 896] # 640, 640, 640, 640
     y_coords = [488, 360, 488, 360, 488, 360, 488, 232]#, 488, 104, 232, 360, 488, 232, 360, 488] # 104, 232, 360, 488
 
@@ -302,22 +305,38 @@ def main():
 
     # Only one region needed as reference for geodetic data
     # -----------------------------------------------
+
+    mask_4 = read_surface('mask_rr0004.dat', '../a_mdt_data/computations/masks')
+
+    test = read_surface('dtu18_SGG-UGM-1_do0280_rr0004_70k.dat', '../a_mdt_data/computations/mdts')
+    test[mask_4!=0] = np.nan
+
+    plt.imshow(test, cmap='turbo', vmin=-1.5, vmax=1.5)
+    plt.show()
+
+    test_cs = read_surface('dtu18_SGG-UGM-1_do0280_rr0004_70k_cs.dat', '../a_mdt_data/computations/currents')
+    plt.imshow(test_cs, cmap='turbo', vmin=0, vmax=1.5)
+    plt.show()
+    
+
+
     geodetic = True
     if geodetic:
         dataset = CAEDataset(region_dir=f'../a_mdt_data/new_testing_geodetic_data/{var}', quilt_dir=None, mdt=mdt)
         t_dataset = CAEDataset(region_dir=f'../a_mdt_data/HR_model_data/new_{ref_var}_{var}_regions', quilt_dir=None, mdt=mdt)
-        network_images = dataset.get_regions(x, y)
+        network_images, _ = dataset.get_regions(x, y)
         network_images = torch.stack(network_images)
-        target = t_dataset.get_regions(x,y)[0]
+        target = t_dataset.get_regions(x,y)[0][0]
     else:
-        dataset = CAEDataset(region_dir=f'../a_mdt_data/HR_model_data/new_{ref_var}_{var}_regions', quilt_dir=f'./quilting/WAE_MMD2_{var}', mdt=mdt)
+        dataset = CAEDataset(region_dir=f'../a_mdt_data/HR_model_data/new_{ref_var}_{var}_regions', quilt_dir=f'./quilting/DCGAN_{var}', mdt=mdt)
         t_dataset = CAEDataset(region_dir=f'../a_mdt_data/HR_model_data/new_{ref_var}_{var}_regions', quilt_dir=None, mdt=mdt) #small_{var}_testing
-        network_images = dataset.get_regions(x, y)
+        network_images, _ = dataset.get_regions(x, y)
         network_images = torch.stack(network_images)
-        target = t_dataset.get_regions(x,y)
+        target, _ = t_dataset.get_regions(x,y)
         target = torch.stack(target)
         target = torch.squeeze(target, dim=1)
     
+
     images, target = detach_tensors([network_images, target])
     images = np.squeeze(images, axis=1) 
 
@@ -328,61 +347,65 @@ def main():
     mask = land_false(images)[0]
     target = target * mask
     images = images * mask
-    fig, ax = plt.subplots(1)
-    ax.imshow(target[0], cmap='turbo')
-    ax.add_patch(circ1)
-    ax.add_patch(circ2)
-    plt.text(33 + 5, 80 + 2, '1', color='white', fontsize=13)
-    plt.text(46 + 5, 58 + 2, '2', color='white', fontsize=13)
-    plt.show()
 
-    print(target.shape)
-    disc_target = discretize(target[0])
-    print(disc_target.shape)
-    plt.imshow(disc_target)
-    plt.show()
+    # Plotting with circles on current core values
+    # -----------------------
+    # fig, ax = plt.subplots(1)
+    # ax.imshow(target[0], cmap='turbo')
+    # ax.add_patch(circ1)
+    # ax.add_patch(circ2)
+    # plt.text(33 + 5, 80 + 2, '1', color='white', fontsize=13)
+    # plt.text(46 + 5, 58 + 2, '2', color='white', fontsize=13)
 
+    geod_mdt = [read_surface('dtu18_EIGEN-6C2_do0280_rr0004.dat', '../a_mdt_data/computations/mdts/'),
+                read_surface('dtu18_eigen-6c4_do0280_rr0004.dat', '../a_mdt_data/computations/mdts/')]
+    II, JJ = 720, 1440
+    geod_mask = geod_mdt[0] == 0
+    print(geod_mdt[0].shape)
+    lons, lats = create_coords(0.25)
+    sigma = 1000
+    filtered_geod_mdt = rb_filter(II, JJ, lons, lats, geod_mdt[0], geod_mask, sigma, 'gsn')
+    fig, axs = plt.subplots(1, 2)
+    axs[0].imshow(geod_mdt)
+    axs[1].imshow(filtered_geod_mdt)
+    plt.show()
+    return
 
     gauss_filtered = []
-
-    
-    # Calculate Gaussian filtered MDT using rb_gaussian across multiple filter radii
+    # Calculate Gaussian filtered MDT using rb_filter across multiple filter radii - doesn't work for cs
     # --------------------------------------------
     # sigmas = np.arange(10000, 150001, 10000)
-    sigmas = [10000] * 14 + [50000]
+    sigmas = [1000] * 15 #+ [150000]
     II, JJ = 128, 128
     gauss_rmsds = []
     gauss_avg_rmsds = []
+    g_images = images
     for sigma in sigmas:
         print('Working for sigma: ', sigma)
-        g_mask = images[0] == 0
+        g_mask = g_images[0] == 0
         lons, lats, _ = get_spatial_params(x, y)
-        gauss_images = [rb_gaussian(II, JJ, lons, lats, image, g_mask, sigma, 'gsn') for image in images]
+        gauss_images = [rb_filter(II, JJ, lons, lats, image, g_mask, sigma, 'gsn') for image in g_images]
         gauss_images = np.array(gauss_images)
         # 8 x 2 x 128 x 128: sigma(50000) x surface(2 different models) x 128 x 128
-        print('gauss images shape: ', gauss_images.shape)
         gauss_filtered.append(gauss_images)
         
         # For pixelwise plot: 128 x 128 (averaged over different products for the same region e.g. 0, 488)
         gauss_rmsd = compute_avg_rmsd(gauss_images, target, hw_size=5, mask=mask)
-        print('GAUSS RMSD SHAPE: ', gauss_rmsd.shape, gauss_rmsd)
         # Number of sigmas x 128 x 128
         gauss_rmsds.append(gauss_rmsd)
 
         # For line graph: 2
         gauss_avg_rmsds.append(np.mean(gauss_rmsd))
-    print('GAUSS RMSDS SHAPE: ', len(gauss_rmsds), gauss_rmsds)
-    # Following means pixelwise plots and gives out 1 value per sigma value
-    print('GAUSS AVG RMSDS SHAPE: ', len(gauss_avg_rmsds), gauss_avg_rmsds)
 
+            # for fname, image in zip(mdt_fnames, g_images):
+            #     write_surface(f'{sigma//1000}km_{fname}.dat', image, 'C:/Users/oa18724/Documents/Master_PhD_folder/a_mdt_data/gauss_filt_geod_mdts/')
+    # else:
+    #     gauss_cs_dataset = CAEDataset(region_dir=f'../a_mdt_data/gauss_filt_geod_mdts_cs', quilt_dir=None, mdt=mdt)
+    #     gauss_filt_cs, _ = gauss_cs_dataset.get_regions(x, y)
+    #     gauss_filt_cs = torch.stack(gauss_filt_cs)
+    #     gauss_filt_cs = detach_tensors([gauss_filt_cs])
+    #     gauss_filt_cs = np.squeeze(gauss_filt_cs, axis=1)
 
-
-    # Calculate RMSD: test for one filter radius
-    # -----------------------
-    # Avg RMSD for one sigma:
-    gauss_rmsd = compute_avg_rmsd(gauss_filtered[0], target, hw_size=5, mask=mask)
-    # plt.imshow(gauss_rmsd, cmap='jet', vmax=0.2)
-    # plt.show()
 
     def forward_pass(model, network_images, target=None):
         outputs = model(network_images)
@@ -432,67 +455,87 @@ def main():
     # --------------------------------------------------
     r = 2
     a = 5
-    epoch_inc = 25
-    epochs = [a * r ** i for i in range(6)]
-    vanilla_filepaths = [f'./models/vanilla_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
-    rmsds, avg_residuals, network_avg_rmsds, network_outputs, residuals = test_multiple_models(vanilla_filepaths)
+    # epochs = [a * r ** i for i in range(6)]
+    epochs = np.arange(10, 191, 10, dtype=int)
+    # vanilla_filepaths = [f'./models/vanilla_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
+    # rmsds, avg_residuals, network_avg_rmsds, network_outputs, residuals = test_multiple_models(vanilla_filepaths)
 
-    aug_filepaths = [f'./models/aug_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
-    aug_rmsds, aug_avg_residuals, aug_network_avg_rmsds, aug_network_outputs, aug_residuals = test_multiple_models(aug_filepaths)
+    # aug_filepaths = [f'./models/aug_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
+    # aug_rmsds, aug_avg_residuals, aug_network_avg_rmsds, aug_network_outputs, aug_residuals = test_multiple_models(aug_filepaths)
 
-    multiscale_loss_filepaths = [f'./models/multiscale_loss_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
-    ms_rmsds, ms_avg_residuals, ms_network_avg_rmsds, ms_network_outputs, ms_residuals = test_multiple_models(multiscale_loss_filepaths)
+    # multiscale_loss_filepaths = [f'./models/multiscale_loss_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
+    # ms_rmsds, ms_avg_residuals, ms_network_avg_rmsds, ms_network_outputs, ms_residuals = test_multiple_models(multiscale_loss_filepaths)
 
-    aug_multiscale_loss_filepaths = [f'./models/aug_multiscale_loss_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
-    aug_ms_rmsds, aug_ms_avg_residuals, aug_ms_network_avg_rmsds, aug_ms_network_outputs, aug_ms_residuals = test_multiple_models(aug_multiscale_loss_filepaths)
+    # aug_multiscale_loss_filepaths = [f'./models/aug_multiscale_loss_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
+    # aug_ms_rmsds, aug_ms_avg_residuals, aug_ms_network_avg_rmsds, aug_ms_network_outputs, aug_ms_residuals = test_multiple_models(aug_multiscale_loss_filepaths)
 
+    # WAE_loss_filepaths = [f'./models/WAE_vanilla_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
+    # WAE_rmsds, WAE_avg_residuals, WAE_network_avg_rmsds, WAE_network_outputs, WAE_residuals = test_multiple_models(WAE_loss_filepaths)
+
+    # The following should have cs as {var} instead
     GAN_coast_filepaths = [f'./models/coast_GAN_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
     GAN_coast_rmsds, GAN_coast_avg_residuals, GAN_coast_network_avg_rmsds, GAN_coast_network_outputs, GAN_coast_residuals = test_multiple_models(GAN_coast_filepaths)
-
-    WAE_loss_filepaths = [f'./models/WAE_vanilla_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
-    WAE_rmsds, WAE_avg_residuals, WAE_network_avg_rmsds, WAE_network_outputs, WAE_residuals = test_multiple_models(WAE_loss_filepaths)
 
     WAE_coast_filepaths = [f'./models/coast_WAE_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
     WAE_coast_rmsds, WAE_coast_avg_residuals, WAE_coast_network_avg_rmsds, WAE_coast_network_outputs, WAE_coast_residuals = test_multiple_models(WAE_coast_filepaths)
 
-    # Providing first images for following subplots (Gaussian filtered for RMSD and Unfiltered for Residuals)
-    # -----------------------------------------------
-    min_index = gauss_avg_rmsds.index(min(gauss_avg_rmsds))
-    rmsds = [gauss_rmsds[min_index]] + rmsds
-    avg_residuals = [compute_avg_residual(images, target)] + avg_residuals
-    residuals = [(images[0] - target[0])] + residuals
-
-    #
     # -----------------------------------------------
     indices = [0,3,6,9,12,14]
     plot_list = [GAN_coast_network_outputs[i][0][0] for i in range(6)] + [WAE_coast_network_outputs[i][0][0] for i in range(6)] + [gauss_filtered[i][0] for i in indices]
-    print(len(plot_list))
-    print(plot_list[0].shape)
-
-    exact_vals = []
-    for i in range(len(plot_list)):
-        vals = plot_list[i][33, 80]
-        print(vals)
-        print(vals.shape)
-        exact_vals.append(vals)
-    print("exact_vals", exact_vals)
-
     plot_titles = [f'{epoch} epochs' for epoch in epochs]*2 + [f'filter radius: {sigmas[i]//1000}km' for i in indices]
-    create_subplot(plot_list, [[x, y]] * len(plot_list), cols=6, titles=plot_titles)
+    # create_subplot(plot_list, [[x, y]] * len(plot_list), cols=6, titles=plot_titles)
+
+    threshold_mask = discretize(GAN_coast_network_outputs[5][0][0])
+    GAN_disc_regions = [(GAN_coast_network_outputs[i][0][0])*threshold_mask for i in range(len(GAN_coast_network_outputs))]
+    WAE_disc_regions = [(WAE_coast_network_outputs[i][0][0])*threshold_mask for i in range(len(WAE_coast_network_outputs))]
+    gauss_disc_regions = [(gauss_filtered[i][0])*threshold_mask for i in range(len(gauss_filtered))]
+    disc_plot_list = [GAN_disc_regions[i] for i in range(6)] + [WAE_disc_regions[i] for i in range(6)] + [gauss_disc_regions[i] for i in indices]
+    # create_subplot(disc_plot_list, [[x, y]] * len(disc_plot_list), cols=6, titles=plot_titles)
+
+    GAN_disc_regions = [(GAN_coast_network_outputs[i][0][0]*threshold_mask)[32:98,20:100] for i in range(len(GAN_coast_network_outputs))]
+    WAE_disc_regions = [(WAE_coast_network_outputs[i][0][0]*threshold_mask)[32:98,20:100] for i in range(len(WAE_coast_network_outputs))]
+    gauss_disc_regions = [(gauss_filtered[i][0]*threshold_mask)[32:98,20:100] for i in range(len(gauss_filtered))]
+    # disc_plot_regions = [GAN_disc_regions[i] for i in range(6)] + [WAE_disc_regions[i] for i in range(6)] + [gauss_disc_regions[i] for i in indices]
+
+
+    GAN_core_vals = [np.nanmean(GAN_disc_regions[i]) for i in range(len(GAN_disc_regions))]
+    WAE_core_vals = [np.nanmean(WAE_disc_regions[i]) for i in range(len(WAE_disc_regions))]
+    gauss_core_vals = [np.nanmean(gauss_disc_regions[i]) for i in range(len(gauss_disc_regions))]
+    # for val_1, val_2, val_3 in zip(WAE_core_vals, GAN_core_vals, gauss_core_vals):
+    #     print(f"{val_1},{val_2},{val_3}")
+    print("GAN_core_vals")
+    for val in GAN_core_vals:
+        print(val)
+    print("WAE_core_vals")
+    for val in WAE_core_vals:
+        print(val)
+    print("gauss_core_vals")
+    for val in gauss_core_vals:
+        print(val)
+    
+    GAN_quiet_regions = [(GAN_coast_network_outputs[i][0][0])[60:96,84:120] for i in range(len(GAN_coast_network_outputs))]
+    WAE_quiet_regions = [(WAE_coast_network_outputs[i][0][0])[60:96,84:120] for i in range(len(WAE_coast_network_outputs))]
+    gauss_quiet_regions = [(gauss_filtered[i][0])[60:96,84:120] for i in range(len(gauss_filtered))]
+    plt.imshow(GAN_coast_network_outputs[0][0][0][60:96,84:120])
     plt.show()
     
-    print(len(plot_list))
-    plot_list = np.asarray(plot_list)
-    print(plot_list.shape)
-    disc_list = []
-    WAE_disc_list = [discretize(WAE_coast_network_outputs[i]) for i in range(len(WAE_coast_network_outputs))]
-    GAN_disc_list = [discretize(GAN_coast_network_outputs[i]) for i in range(len(GAN_coast_network_outputs))]
-    print('*', len(WAE_disc_list))
-    disc_plot_list = [GAN_disc_list[i][0][0] for i in range(6)] + [WAE_disc_list[i][0][0] for i in range(6)]
-    create_subplot(disc_plot_list, [[x, y]] * len(disc_plot_list), cols=6, titles=plot_titles)
-    plt.show()
+    GAN_qr_vals = [np.nanmean(GAN_quiet_regions[i]) for i in range(len(GAN_quiet_regions))]
+    WAE_qr_vals = [np.nanmean(WAE_quiet_regions[i]) for i in range(len(WAE_quiet_regions))]
+    gauss_qr_vals = [np.nanmean(gauss_quiet_regions[i]) for i in range(len(gauss_quiet_regions))]
 
-    #
+    print("GAN_qr_vals")
+    for val in GAN_qr_vals:
+        print(val)
+    print("WAE_qr_vals")
+    for val in WAE_qr_vals:
+        print(val)
+    print("gauss_qr_vals")
+    for val in gauss_qr_vals:
+        print(val)
+
+
+
+
     # -----------------------------------------------
     indices = [0, 2, 5]
     plot_list = [images[0]] + [WAE_coast_network_outputs[i][0][0] for i in indices] + [target[0]]
@@ -572,8 +615,8 @@ def main():
 
     rmses = []
     for x, y in zip(x_coords, y_coords):
-        regions = dataset.get_regions(x, y)
-        target = t_dataset.get_regions(x, y)[0]
+        regions, _ = dataset.get_regions(x, y)
+        target, _ = t_dataset.get_regions(x, y)[0]
         regions = torch.stack(regions)
         output_regions = model(regions)
         target = target.detach().cpu().numpy()
