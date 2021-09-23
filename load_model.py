@@ -306,19 +306,6 @@ def main():
     # Only one region needed as reference for geodetic data
     # -----------------------------------------------
 
-    mask_4 = read_surface('mask_rr0004.dat', '../a_mdt_data/computations/masks')
-
-    test = read_surface('dtu18_SGG-UGM-1_do0280_rr0004_70k.dat', '../a_mdt_data/computations/mdts')
-    test[mask_4!=0] = np.nan
-
-    plt.imshow(test, cmap='turbo', vmin=-1.5, vmax=1.5)
-    plt.show()
-
-    test_cs = read_surface('dtu18_SGG-UGM-1_do0280_rr0004_70k_cs.dat', '../a_mdt_data/computations/currents')
-    plt.imshow(test_cs, cmap='turbo', vmin=0, vmax=1.5)
-    plt.show()
-    
-
 
     geodetic = True
     if geodetic:
@@ -357,54 +344,33 @@ def main():
     # plt.text(33 + 5, 80 + 2, '1', color='white', fontsize=13)
     # plt.text(46 + 5, 58 + 2, '2', color='white', fontsize=13)
 
-    geod_mdt = [read_surface('dtu18_EIGEN-6C2_do0280_rr0004.dat', '../a_mdt_data/computations/mdts/'),
-                read_surface('dtu18_eigen-6c4_do0280_rr0004.dat', '../a_mdt_data/computations/mdts/')]
-    II, JJ = 720, 1440
-    geod_mask = geod_mdt[0] == 0
-    print(geod_mdt[0].shape)
-    lons, lats = create_coords(0.25)
-    sigma = 1000
-    filtered_geod_mdt = rb_filter(II, JJ, lons, lats, geod_mdt[0], geod_mask, sigma, 'gsn')
-    fig, axs = plt.subplots(1, 2)
-    axs[0].imshow(geod_mdt)
-    axs[1].imshow(filtered_geod_mdt)
-    plt.show()
-    return
 
     gauss_filtered = []
-    # Calculate Gaussian filtered MDT using rb_filter across multiple filter radii - doesn't work for cs
-    # --------------------------------------------
-    # sigmas = np.arange(10000, 150001, 10000)
-    sigmas = [1000] * 15 #+ [150000]
-    II, JJ = 128, 128
-    gauss_rmsds = []
-    gauss_avg_rmsds = []
-    g_images = images
-    for sigma in sigmas:
-        print('Working for sigma: ', sigma)
-        g_mask = g_images[0] == 0
-        lons, lats, _ = get_spatial_params(x, y)
-        gauss_images = [rb_filter(II, JJ, lons, lats, image, g_mask, sigma, 'gsn') for image in g_images]
-        gauss_images = np.array(gauss_images)
-        # 8 x 2 x 128 x 128: sigma(50000) x surface(2 different models) x 128 x 128
-        gauss_filtered.append(gauss_images)
+    # # Calculate Gaussian filtered MDT using rb_filter across multiple filter radii - doesn't work for cs
+    # # --------------------------------------------
+    # # sigmas = np.arange(10000, 150001, 10000)
+    # sigmas = [1000] * 15 #+ [150000]
+    # II, JJ = 128, 128
+    # gauss_rmsds = []
+    # gauss_avg_rmsds = []
+    # g_images = images
+    # for sigma in sigmas:
+    #     print('Working for sigma: ', sigma)
+    #     g_mask = g_images[0] == 0
+    #     lons, lats, _ = get_spatial_params(x, y)
+    #     gauss_images = [rb_filter(II, JJ, lons, lats, image, g_mask, sigma, 'gsn') for image in g_images]
+    #     gauss_images = np.array(gauss_images)
+    #     # 8 x 2 x 128 x 128: sigma(50000) x surface(2 different models) x 128 x 128
+    #     gauss_filtered.append(gauss_images)
         
-        # For pixelwise plot: 128 x 128 (averaged over different products for the same region e.g. 0, 488)
-        gauss_rmsd = compute_avg_rmsd(gauss_images, target, hw_size=5, mask=mask)
-        # Number of sigmas x 128 x 128
-        gauss_rmsds.append(gauss_rmsd)
+    #     # For pixelwise plot: 128 x 128 (averaged over different products for the same region e.g. 0, 488)
+    #     gauss_rmsd = compute_avg_rmsd(gauss_images, target, hw_size=5, mask=mask)
+    #     # Number of sigmas x 128 x 128
+    #     gauss_rmsds.append(gauss_rmsd)
 
-        # For line graph: 2
-        gauss_avg_rmsds.append(np.mean(gauss_rmsd))
+    #     # For line graph: 2
+    #     gauss_avg_rmsds.append(np.mean(gauss_rmsd))
 
-            # for fname, image in zip(mdt_fnames, g_images):
-            #     write_surface(f'{sigma//1000}km_{fname}.dat', image, 'C:/Users/oa18724/Documents/Master_PhD_folder/a_mdt_data/gauss_filt_geod_mdts/')
-    # else:
-    #     gauss_cs_dataset = CAEDataset(region_dir=f'../a_mdt_data/gauss_filt_geod_mdts_cs', quilt_dir=None, mdt=mdt)
-    #     gauss_filt_cs, _ = gauss_cs_dataset.get_regions(x, y)
-    #     gauss_filt_cs = torch.stack(gauss_filt_cs)
-    #     gauss_filt_cs = detach_tensors([gauss_filt_cs])
-    #     gauss_filt_cs = np.squeeze(gauss_filt_cs, axis=1)
 
 
     def forward_pass(model, network_images, target=None):
@@ -472,6 +438,16 @@ def main():
     # WAE_loss_filepaths = [f'./models/WAE_vanilla_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
     # WAE_rmsds, WAE_avg_residuals, WAE_network_avg_rmsds, WAE_network_outputs, WAE_residuals = test_multiple_models(WAE_loss_filepaths)
 
+    sigmas = np.arange(30000, 150001, 10000)
+    mss = 'dtu18'
+    d_o = '280'
+    rr = '4'
+    directory = '../a_mdt_data/computations/currents/gauss_filtered_mdts_cs/combined_cdae_experiments/regions'
+    geoid_names = ['egm2008', 'EIGEN-6C2', 'EIGEN-6C3stat', 'eigen-6c4', 'geco', 'SGG-UGM-1', 'XGM2019e_2159'] 
+    for sigma in sigmas:
+        arr = [np.load(os.path.join(directory, f'{mss}_{name}_do0{d_o}_rr000{rr}_{sigma//1000}k_cs_{x}_{y}.npy')) for name in geoid_names]
+        gauss_filtered.append(arr)
+
     # The following should have cs as {var} instead
     GAN_coast_filepaths = [f'./models/coast_GAN_{var}/{epoch}e_{var}_model_cdae.pth' for epoch in epochs]
     GAN_coast_rmsds, GAN_coast_avg_residuals, GAN_coast_network_avg_rmsds, GAN_coast_network_outputs, GAN_coast_residuals = test_multiple_models(GAN_coast_filepaths)
@@ -480,27 +456,48 @@ def main():
     WAE_coast_rmsds, WAE_coast_avg_residuals, WAE_coast_network_avg_rmsds, WAE_coast_network_outputs, WAE_coast_residuals = test_multiple_models(WAE_coast_filepaths)
 
     # -----------------------------------------------
-    indices = [0,3,6,9,12,14]
+    indices = [0,2,4,6,9,12]
+    print((np.array(GAN_coast_network_outputs)).shape, (np.array(WAE_coast_network_outputs)).shape, (np.array(gauss_filtered)).shape)
     plot_list = [GAN_coast_network_outputs[i][0][0] for i in range(6)] + [WAE_coast_network_outputs[i][0][0] for i in range(6)] + [gauss_filtered[i][0] for i in indices]
     plot_titles = [f'{epoch} epochs' for epoch in epochs]*2 + [f'filter radius: {sigmas[i]//1000}km' for i in indices]
     # create_subplot(plot_list, [[x, y]] * len(plot_list), cols=6, titles=plot_titles)
 
-    threshold_mask = discretize(GAN_coast_network_outputs[5][0][0])
+    threshold_mask = discretize(GAN_coast_network_outputs[15][0][0])
     GAN_disc_regions = [(GAN_coast_network_outputs[i][0][0])*threshold_mask for i in range(len(GAN_coast_network_outputs))]
+    print(np.array(GAN_disc_regions).shape)
     WAE_disc_regions = [(WAE_coast_network_outputs[i][0][0])*threshold_mask for i in range(len(WAE_coast_network_outputs))]
-    gauss_disc_regions = [(gauss_filtered[i][0])*threshold_mask for i in range(len(gauss_filtered))]
+    print(np.array(WAE_disc_regions).shape)
+    print(threshold_mask.shape)
+    gauss_disc_regions = [(gauss_filtered[i][0])*threshold_mask for i in range(len(sigmas))]
+    print(np.array(gauss_disc_regions).shape)
     disc_plot_list = [GAN_disc_regions[i] for i in range(6)] + [WAE_disc_regions[i] for i in range(6)] + [gauss_disc_regions[i] for i in indices]
+
+    plot_list = [gauss_filtered[i][0] for i in indices]
+    # create_subplot(plot_list, [[x, y]] * len(plot_list), cols=6)
+    # plt.show()
+
     # create_subplot(disc_plot_list, [[x, y]] * len(disc_plot_list), cols=6, titles=plot_titles)
+    # plt.show()
 
-    GAN_disc_regions = [(GAN_coast_network_outputs[i][0][0]*threshold_mask)[32:98,20:100] for i in range(len(GAN_coast_network_outputs))]
-    WAE_disc_regions = [(WAE_coast_network_outputs[i][0][0]*threshold_mask)[32:98,20:100] for i in range(len(WAE_coast_network_outputs))]
-    gauss_disc_regions = [(gauss_filtered[i][0]*threshold_mask)[32:98,20:100] for i in range(len(gauss_filtered))]
+
+    unsqueezed_threshold_mask = np.expand_dims(np.expand_dims(threshold_mask, 0), 0)
+    print(threshold_mask.shape, unsqueezed_threshold_mask.shape)
+    GAN_disc_regions = (np.array(GAN_coast_network_outputs)[:,:,0]*threshold_mask)[:,:,32:98,20:100]
+    WAE_disc_regions = (np.array(WAE_coast_network_outputs)[:,:,0]*threshold_mask)[:,:,32:98,20:100]
+    gauss_disc_regions = (gauss_filtered*threshold_mask)[:,:,32:98,20:100]
+    print(GAN_disc_regions.shape, WAE_disc_regions.shape, gauss_disc_regions.shape)
     # disc_plot_regions = [GAN_disc_regions[i] for i in range(6)] + [WAE_disc_regions[i] for i in range(6)] + [gauss_disc_regions[i] for i in indices]
+    
+    GAN_quiet_regions = np.array(GAN_coast_network_outputs)[:,:,0,60:96,84:120]
+    WAE_quiet_regions = np.array(WAE_coast_network_outputs)[:,:,0,60:96,84:120]
+    gauss_quiet_regions = np.array(gauss_filtered)[:,:,60:96,84:120]
 
+    print(np.array(GAN_disc_regions).shape, np.array(WAE_disc_regions).shape, np.array(gauss_disc_regions).shape)
 
-    GAN_core_vals = [np.nanmean(GAN_disc_regions[i]) for i in range(len(GAN_disc_regions))]
-    WAE_core_vals = [np.nanmean(WAE_disc_regions[i]) for i in range(len(WAE_disc_regions))]
-    gauss_core_vals = [np.nanmean(gauss_disc_regions[i]) for i in range(len(gauss_disc_regions))]
+    GAN_core_vals = np.nanmean(GAN_disc_regions, axis=(1,2,3))
+    WAE_core_vals = np.nanmean(WAE_disc_regions, axis=(1,2,3))
+    gauss_core_vals = np.nanmean(gauss_disc_regions, axis=(1,2,3))
+
     # for val_1, val_2, val_3 in zip(WAE_core_vals, GAN_core_vals, gauss_core_vals):
     #     print(f"{val_1},{val_2},{val_3}")
     print("GAN_core_vals")
@@ -513,15 +510,9 @@ def main():
     for val in gauss_core_vals:
         print(val)
     
-    GAN_quiet_regions = [(GAN_coast_network_outputs[i][0][0])[60:96,84:120] for i in range(len(GAN_coast_network_outputs))]
-    WAE_quiet_regions = [(WAE_coast_network_outputs[i][0][0])[60:96,84:120] for i in range(len(WAE_coast_network_outputs))]
-    gauss_quiet_regions = [(gauss_filtered[i][0])[60:96,84:120] for i in range(len(gauss_filtered))]
-    plt.imshow(GAN_coast_network_outputs[0][0][0][60:96,84:120])
-    plt.show()
-    
-    GAN_qr_vals = [np.nanmean(GAN_quiet_regions[i]) for i in range(len(GAN_quiet_regions))]
-    WAE_qr_vals = [np.nanmean(WAE_quiet_regions[i]) for i in range(len(WAE_quiet_regions))]
-    gauss_qr_vals = [np.nanmean(gauss_quiet_regions[i]) for i in range(len(gauss_quiet_regions))]
+    GAN_qr_vals = np.nanmean(GAN_quiet_regions, axis=(1,2,3)) 
+    WAE_qr_vals = np.nanmean(WAE_quiet_regions, axis=(1,2,3)) 
+    gauss_qr_vals = np.nanmean(gauss_quiet_regions, axis=(1,2,3))
 
     print("GAN_qr_vals")
     for val in GAN_qr_vals:
@@ -532,9 +523,6 @@ def main():
     print("gauss_qr_vals")
     for val in gauss_qr_vals:
         print(val)
-
-
-
 
     # -----------------------------------------------
     indices = [0, 2, 5]

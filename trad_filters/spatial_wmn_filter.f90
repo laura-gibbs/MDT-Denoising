@@ -10,10 +10,11 @@
 !     Variable declarations
 !---------------------------------------
       integer     :: i,j,II,JJ,rr               ! Lon/lat dimensions resolution
-      real        :: frad=70000                 ! Filter radius
+      real        :: frad                       ! Filter radius
+      integer     :: frad_int
       character*3 :: fltr_type='gsn'            ! Filter type
       character(len=128)   :: name_mdt
-      character(len=6)    :: frad_str
+      character(len=4)    :: frad_str
 !---------------------------------------
 
       real,allocatable    :: msk(:,:)
@@ -47,17 +48,21 @@
 !---------------------------------------
 
       pin0='C:/Users/oa18724/Documents/Master_PhD_folder/a_mdt_data/computations/masks/'
-      pin1='C:/Users/oa18724/Documents/Master_PhD_folder/a_mdt_data/computations/mdts/'
-      pout='C:/Users/oa18724/Documents/Master_PhD_folder/a_mdt_data/computations/mdts/'
+      pin1='C:/Users/oa18724/Documents/Master_PhD_folder/a_mdt_data/computations/mdts/mdts_tbf/'
+      pout='C:/Users/oa18724/Documents/Master_PhD_folder/a_mdt_data/computations/mdts/gauss_filtered_mdts/'
 !-------------------------------------------------
 !===========================================================    
 
 !     Read in the mdt parameter file
 !--------------------------------------------------
-      open(21,file='./parameters.txt',form='formatted')
+      open(21,file='./filter_params.txt',form='formatted')
       read(21,'(A40)')name_mdt
       read(21,'(I4)')rr
+      read(21,'(I6)')frad_int
       close(21)
+      frad = REAL(frad_int)
+      write(*,*) frad_int, frad
+
 
 !-------------------------------------------------
 
@@ -120,10 +125,10 @@
          msk=0.0
       end if
 !-------------------------------------------------
-      ! write(frad_str,'(I4)')frad
+      write(frad_str, '(I4)')(frad_int/1000)
 
       call spatial_wmn_filter(II,JJ,lon_d,lat_d,mdt,msk,frad,fltr_type,sdata,rsd)
-      fout=trim(name_mdt)//'_70k.dat'
+      fout=trim(name_mdt)//'_'//trim(adjustl(frad_str))//'k.dat'
       open(20,file=trim(pout)//trim(fout),&
       &form='unformatted')
       write(20)sdata
